@@ -118,9 +118,38 @@ string GetRendezvousKey(const string& tensor_name,
 
 }  // namespace
 
+// Yitao-TLS-Begin
+void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, int* next_run_id) {
+  LOG(INFO) << "[Yitao] ****** TLS(), we are starting the TLS Scheduler!!! ******";
+  int my_id = -1;
+  int counter = -1;
+
+  while (true) {
+    std::unique_lock<std::mutex> lk(*sched_lock);
+    sched_cv->wait(lk, [my_id, next_run_id](){return *next_run_id == my_id;});
+
+    counter = (counter + 1) % 2;
+    *next_run_id = counter;
+
+    LOG(INFO) << "[Yitao] ****** TLS Scheduler decided to run next_run_id = " << *next_run_id;
+
+    sched_cv->notify_all();
+  }
+}
+// Yitao-TLS-End
+
 class DirectSessionFactory : public SessionFactory {
  public:
-  DirectSessionFactory() {}
+  DirectSessionFactory() {
+    LOG(INFO) << "[Yitao] Testing: DirectSessionFactory::DirectSessionFactory(), we are calling initialization function of DirectSessionFactory @@@@@@";
+    sess_count = -1;
+    sched_lock = new std::mutex;
+    LOG(INFO) << "[Yitao] *** we have sched_lock address = " << sched_lock;
+    sched_cv = new std::condition_variable;
+    next_run_id = new int;
+    *next_run_id = 1;
+    my_thread = new std::thread(TLS_scheduler, sched_lock, sched_cv, next_run_id);
+  }
 
   bool AcceptsOptions(const SessionOptions& options) override {
     return options.target.empty();
@@ -139,12 +168,37 @@ class DirectSessionFactory : public SessionFactory {
       return nullptr;
     }
 
+    // Yitao-TLS-Begin
+    {
+      mutex_lock l(sessions_lock_);
+      sess_count += 1;
+    }
+    LOG(INFO) << "[Yitao] Testing: DirectSessionFactory::NewSession(), we have " << GetSessionCount() << " DirectSessions now! @@@@@@";
+    // Yitao-TLS-End
+
     DirectSession* session =
-        new DirectSession(options, new DeviceMgr(devices), this);
+        new DirectSession(options, new DeviceMgr(devices), this, sess_count);
     {
       mutex_lock l(sessions_lock_);
       sessions_.push_back(session);
     }
+
+    // Yitao-TLS-Begin
+    // We are having the first Session, let's start the TLS scheduler
+    // The reason I didn't put this into DirectSessionFactory's constructor function
+    // is that the constructor function is also called by the client python script.
+    // So if I put the start of TLS scheduler in the contructor function,
+    // then we will have multiple TLS scheduler...
+    if (GetSessionCount() == 1) {
+      // sched_lock = new std::mutex;
+      // LOG(INFO) << "[Yitao] *** we have sched_lock address = " << sched_lock;
+      // sched_cv = new std::condition_variable;
+      // next_run_id = new int;
+      // *next_run_id = 1;
+      // my_thread = new std::thread(TLS_scheduler, sched_lock, sched_cv, next_run_id);
+    }
+    // Yitao-TLS-End
+
     return session;
   }
 
@@ -176,9 +230,25 @@ class DirectSessionFactory : public SessionFactory {
                     sessions_.end());
   }
 
+  // Yitao-TLS-Begin
+  int GetSessionCount() {
+    return sess_count;
+  }
+  std::mutex* sched_lock;
+  std::condition_variable* sched_cv;
+  int* next_run_id;
+  std::thread* my_thread;
+
+  // Yitao-TLS-End
+
  private:
   mutex sessions_lock_;
   std::vector<DirectSession*> sessions_ GUARDED_BY(sessions_lock_);
+
+  // Yitao-TLS-Begin
+  int sess_count;
+  // Yitao-TLS-End
+
 };
 
 class DirectSessionRegistrar {
@@ -223,12 +293,26 @@ void DirectSession::SchedClosure(thread::ThreadPool* pool,
 
 DirectSession::DirectSession(const SessionOptions& options,
                              const DeviceMgr* device_mgr,
-                             DirectSessionFactory* const factory)
+                             DirectSessionFactory* const factory,
+                             int sess_count)
     : options_(options),
       device_mgr_(device_mgr),
       factory_(factory),
       cancellation_manager_(new CancellationManager()),
       operation_timeout_in_ms_(options_.config.operation_timeout_in_ms()) {
+
+  LOG(INFO) << "[Yitao] ****** DirectSession::DirectSession() ******";
+
+  // Yitao-TLS-Begin
+  sess_id = sess_count;
+  LOG(INFO) << "[Yitao] ****** DirectSession::DirectSession(), we have sess_id = " << sess_id;
+
+  sched_lock = factory_->sched_lock;
+  LOG(INFO) << "[Yitao] *** again we have sched_lock address = " << sched_lock;
+  sched_cv =factory_->sched_cv;
+  next_run_id = factory_->next_run_id;
+  // Yitao-TLS-End
+
   if (options_.config.session_inter_op_thread_pool_size() > 0) {
     for (int i = 0; i < options_.config.session_inter_op_thread_pool_size();
          ++i) {
@@ -401,6 +485,30 @@ Status DirectSession::Run(const RunOptions& run_options,
                           const std::vector<string>& target_nodes,
                           std::vector<Tensor>* outputs,
                           RunMetadata* run_metadata) {
+
+  LOG(INFO) << "[Yitao] ****** DirectSession::Run() ******";
+
+  // Yitao-TLS-Begin
+  LOG(INFO) << "[Yitao] ****** DirectSession::Run(), we have sess_id = " << sess_id;
+
+  std::unique_lock<std::mutex> lk(*sched_lock);
+  if (sess_id == 0 || sess_id == 1) {
+    LOG(INFO) << "[Yitao] ***@@@=== 1 ===@@@*** sess_id = " << sess_id;
+    // sched_cv->wait(lk, [this](){return *next_run_id == sess_id;});
+    sched_cv->wait(lk, [this](){
+      if (*next_run_id == sess_id) {
+        LOG(INFO) << "[Yitao] ***@@@=== 2 ===@@@*** sess_id = " << sess_id;
+        return true;
+      } else {
+        LOG(INFO) << "[Yitao] ***@@@=== 3 ===@@@*** sess_id = " << sess_id;
+        return false;
+      }
+    });
+    *next_run_id = -1;
+    LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id;
+  }
+  // Yitao-TLS-End
+
   TF_RETURN_IF_ERROR(CheckNotClosed());
   direct_session_runs->GetCell()->IncrementBy(1);
   {
@@ -626,6 +734,12 @@ Status DirectSession::Run(const RunOptions& run_options,
       exec_and_lib.graph->ToGraphDef(partition_graph_def);
     }
   }
+
+  // Yitao-TLS-Begin
+  if (sess_id == 0 || sess_id == 1) {
+    sched_cv->notify_all();
+  }
+  // Yitao-TLS-End
 
   return Status::OK();
 }

@@ -23,6 +23,10 @@ limitations under the License.
 #include <unordered_set>
 #include <vector>
 
+// Yitao-TLS-Begin
+#include <thread>
+// Yitao-TLS-End
+
 #include "tensorflow/core/common_runtime/costmodel_manager.h"
 #include "tensorflow/core/common_runtime/debugger_state_interface.h"
 #include "tensorflow/core/common_runtime/device_mgr.h"
@@ -59,7 +63,7 @@ class DirectSession : public Session {
   // closed. This ensures that Reset requests from the 'factory' don't get sent
   // to sessions that are already closed.
   DirectSession(const SessionOptions& options, const DeviceMgr* device_mgr,
-                DirectSessionFactory* factory);
+                DirectSessionFactory* factory, int sess_count);
   ~DirectSession() override;
 
   typedef std::vector<std::pair<string, Tensor>> NamedTensorList;
@@ -104,6 +108,14 @@ class DirectSession : public Session {
   }
 
  private:
+
+  // Yitao-TLS-Begin
+  int sess_id;
+  std::mutex* sched_lock;
+  std::condition_variable* sched_cv;
+  int* next_run_id;
+  // Yitao-TLS-End
+
   typedef DirectSession ME;
 
   // We create one executor and its dependent library runtime for

@@ -54,6 +54,9 @@ Status Session::PRun(const string& handle,
 Session* NewSession(const SessionOptions& options) {
   SessionFactory* factory;
   Status s = SessionFactory::GetFactory(options, &factory);
+
+  LOG(INFO) << "[Yitao] Testing: Session* NewSession(), the pointer factory is pointing at " << factory;
+
   if (!s.ok()) {
     LOG(ERROR) << s;
     return nullptr;
@@ -64,6 +67,9 @@ Session* NewSession(const SessionOptions& options) {
 Status NewSession(const SessionOptions& options, Session** out_session) {
   SessionFactory* factory;
   Status s = SessionFactory::GetFactory(options, &factory);
+
+  LOG(INFO) << "[Yitao] Testing: Status NewSession NewSession(), the pointer factory is pointing at " << factory;
+
   if (!s.ok()) {
     *out_session = nullptr;
     LOG(ERROR) << s;
