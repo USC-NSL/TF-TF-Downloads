@@ -24,6 +24,8 @@ limitations under the License.
 #include <vector>
 
 // Yitao-TLS-Begin
+// I am using the thread library to start a background thread
+// for the TLS scheduler. Might update later...
 #include <thread>
 // Yitao-TLS-End
 
@@ -110,9 +112,18 @@ class DirectSession : public Session {
  private:
 
   // Yitao-TLS-Begin
+  // sess_id is used to distinguish between different Sessions.
+  // Namely, each Session object will be assigned a dedicated sess_id
   int sess_id;
+  // sched_lock and sched_cv are used together to implement the TLS scheduler.
+  // Yitao-to-do: should we assign one conditional variable per Session object,
+  //              instead of using pointers to let Session objects to share the same cv?
   std::mutex* sched_lock;
   std::condition_variable* sched_cv;
+  // next_run_id serves as a token shared by all the Session objects and TLS scheduler
+  // Yitao-to-do: make sure next_run_id is thread_safe.
+  //              currently, I think it is thread_safe since its value will only be read or 
+  //              modified under the conditional variable. But need to further verify.
   int* next_run_id;
   // Yitao-TLS-End
 

@@ -119,6 +119,15 @@ string GetRendezvousKey(const string& tensor_name,
 }  // namespace
 
 // Yitao-TLS-Begin
+// The TLS scheduler is using a token (here, next_run_id) to decide which Session object
+// should run its own Session.run() next. Every time one Session object's Session.run() 
+// finished, it will set next_run_id = -1 to let TLS scheduler decide who should run next.
+// Yitao-to-do: currently, the TLS scheduler has the following limitations:
+//              (1) it is hard-coded to 1:1 ratio between two Session objects. So if one Session
+//                  object has five Session.run()s, and the other has ten Session.run()s. Then the
+//                  second one will be stuck infinitly. So I need to update it to make it smarter...
+//              (2) the current token-based scheduling should be more flexible. Namely, I need to
+//                  make this TLS_scheduler() module more flexbile to support different scheduling policies
 void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, int* next_run_id) {
   LOG(INFO) << "[Yitao] ****** TLS(), we are starting the TLS Scheduler!!! ******";
   int my_id = -1;
@@ -141,6 +150,13 @@ void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, in
 class DirectSessionFactory : public SessionFactory {
  public:
   DirectSessionFactory() {
+    // Yitao-TLS-Begin
+    // Start the TLS scheduler in a background thread.
+    // Yitao-to-do: the problem here is that this DirectSessionFactory's
+    //              constructor function will be called everytime a client
+    //              send request to the server from the client side...
+    //              So we need to find a better place to put this background thread
+    //              to make sure it is only called once during the whole process.
     LOG(INFO) << "[Yitao] Testing: DirectSessionFactory::DirectSessionFactory(), we are calling initialization function of DirectSessionFactory @@@@@@";
     sess_count = -1;
     sched_lock = new std::mutex;
@@ -149,6 +165,7 @@ class DirectSessionFactory : public SessionFactory {
     next_run_id = new int;
     *next_run_id = 1;
     my_thread = new std::thread(TLS_scheduler, sched_lock, sched_cv, next_run_id);
+    // Yitao-TLS-End
   }
 
   bool AcceptsOptions(const SessionOptions& options) override {
@@ -169,6 +186,7 @@ class DirectSessionFactory : public SessionFactory {
     }
 
     // Yitao-TLS-Begin
+    // update the sess_count variable with lock to make sure it is thread-safe
     {
       mutex_lock l(sessions_lock_);
       sess_count += 1;
@@ -184,6 +202,8 @@ class DirectSessionFactory : public SessionFactory {
     }
 
     // Yitao-TLS-Begin
+    // *** This idea has been deprecated in the current version,
+    //     but might be usable in future versions...
     // We are having the first Session, let's start the TLS scheduler
     // The reason I didn't put this into DirectSessionFactory's constructor function
     // is that the constructor function is also called by the client python script.
@@ -231,6 +251,7 @@ class DirectSessionFactory : public SessionFactory {
   }
 
   // Yitao-TLS-Begin
+  // return the value of sess_count
   int GetSessionCount() {
     return sess_count;
   }
@@ -246,6 +267,9 @@ class DirectSessionFactory : public SessionFactory {
   std::vector<DirectSession*> sessions_ GUARDED_BY(sessions_lock_);
 
   // Yitao-TLS-Begin
+  // sess_count is used to set sess_id for each Session object.
+  // Namely, every time we initialize a Session object, we will
+  // use sess_count to assign a unique sess_id to the new Session object
   int sess_count;
   // Yitao-TLS-End
 
@@ -294,7 +318,7 @@ void DirectSession::SchedClosure(thread::ThreadPool* pool,
 DirectSession::DirectSession(const SessionOptions& options,
                              const DeviceMgr* device_mgr,
                              DirectSessionFactory* const factory,
-                             int sess_count)
+                             int sess_count = -1) // [Yitao]: here sess_count is a new variable added by myself...
     : options_(options),
       device_mgr_(device_mgr),
       factory_(factory),
@@ -304,6 +328,9 @@ DirectSession::DirectSession(const SessionOptions& options,
   LOG(INFO) << "[Yitao] ****** DirectSession::DirectSession() ******";
 
   // Yitao-TLS-Begin
+  // In the constructor function of DirectSession,
+  // we assign a unique sess_id to the new Session object
+  // with the help of sess_count.
   sess_id = sess_count;
   LOG(INFO) << "[Yitao] ****** DirectSession::DirectSession(), we have sess_id = " << sess_id;
 
@@ -491,21 +518,23 @@ Status DirectSession::Run(const RunOptions& run_options,
   // Yitao-TLS-Begin
   LOG(INFO) << "[Yitao] ****** DirectSession::Run(), we have sess_id = " << sess_id;
 
+  // Here we hard-coded to use conditional variable to implement the TLS scheduler
+  // Yitao-to-do: make this part more flexible instead of hard-coded...
   std::unique_lock<std::mutex> lk(*sched_lock);
   if (sess_id == 0 || sess_id == 1) {
-    LOG(INFO) << "[Yitao] ***@@@=== 1 ===@@@*** sess_id = " << sess_id;
+    LOG(INFO) << "[Yitao] ***@@@=== 1 ===@@@*** sess_id = " << sess_id << ", let me start!";
     // sched_cv->wait(lk, [this](){return *next_run_id == sess_id;});
     sched_cv->wait(lk, [this](){
       if (*next_run_id == sess_id) {
-        LOG(INFO) << "[Yitao] ***@@@=== 2 ===@@@*** sess_id = " << sess_id;
+        LOG(INFO) << "[Yitao] ***@@@=== 2 ===@@@*** sess_id = " << sess_id << ", it is my turn!";
         return true;
       } else {
-        LOG(INFO) << "[Yitao] ***@@@=== 3 ===@@@*** sess_id = " << sess_id;
+        LOG(INFO) << "[Yitao] ***@@@=== 3 ===@@@*** sess_id = " << sess_id << ", not my turn...";
         return false;
       }
     });
     *next_run_id = -1;
-    LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id;
+    LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id << ", I am done!";
   }
   // Yitao-TLS-End
 
@@ -736,6 +765,8 @@ Status DirectSession::Run(const RunOptions& run_options,
   }
 
   // Yitao-TLS-Begin
+  // Here we hard-coded to use conditional variable to implement the TLS scheduler
+  // Yitao-to-do: make this part more flexible instead of hard-coded...
   if (sess_id == 0 || sess_id == 1) {
     sched_cv->notify_all();
   }
