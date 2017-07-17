@@ -128,17 +128,35 @@ string GetRendezvousKey(const string& tensor_name,
 //                  second one will be stuck infinitly. So I need to update it to make it smarter...
 //              (2) the current token-based scheduling should be more flexible. Namely, I need to
 //                  make this TLS_scheduler() module more flexbile to support different scheduling policies
-void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, int* next_run_id) {
+void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, int* next_run_id, bool* someone_running, std::priority_queue<int>* wait_queue) {
   LOG(INFO) << "[Yitao] ****** TLS(), we are starting the TLS Scheduler!!! ******";
   int my_id = -1;
   int counter = -1;
+
+  // while (true) {
+  //   std::unique_lock<std::mutex> lk(*sched_lock);
+  //   sched_cv->wait(lk, [my_id, next_run_id](){return *next_run_id == my_id;});
+
+  //   counter = (counter + 1) % 2;
+  //   *next_run_id = counter;
+
+  //   LOG(INFO) << "[Yitao] ****** TLS Scheduler decided to run next_run_id = " << *next_run_id;
+
+  //   sched_cv->notify_all();
+  // }
 
   while (true) {
     std::unique_lock<std::mutex> lk(*sched_lock);
     sched_cv->wait(lk, [my_id, next_run_id](){return *next_run_id == my_id;});
 
-    counter = (counter + 1) % 2;
-    *next_run_id = counter;
+    *someone_running = false;
+
+    if ((*wait_queue).empty()) {
+      *next_run_id = 1;
+    } else {
+      *next_run_id = (*wait_queue).top();
+      (*wait_queue).pop();
+    }
 
     LOG(INFO) << "[Yitao] ****** TLS Scheduler decided to run next_run_id = " << *next_run_id;
 
@@ -164,7 +182,10 @@ class DirectSessionFactory : public SessionFactory {
     sched_cv = new std::condition_variable;
     next_run_id = new int;
     *next_run_id = 1;
-    my_thread = new std::thread(TLS_scheduler, sched_lock, sched_cv, next_run_id);
+    someone_running = new bool;
+    *someone_running = false;
+    wait_queue = new std::priority_queue<int>;
+    my_thread = new std::thread(TLS_scheduler, sched_lock, sched_cv, next_run_id, someone_running, wait_queue);
     // Yitao-TLS-End
   }
 
@@ -258,6 +279,8 @@ class DirectSessionFactory : public SessionFactory {
   std::mutex* sched_lock;
   std::condition_variable* sched_cv;
   int* next_run_id;
+  bool* someone_running;
+  std::priority_queue<int>* wait_queue;
   std::thread* my_thread;
 
   // Yitao-TLS-End
@@ -338,6 +361,8 @@ DirectSession::DirectSession(const SessionOptions& options,
   LOG(INFO) << "[Yitao] *** again we have sched_lock address = " << sched_lock;
   sched_cv =factory_->sched_cv;
   next_run_id = factory_->next_run_id;
+  someone_running = factory_->someone_running;
+  wait_queue = factory_->wait_queue;
   // Yitao-TLS-End
 
   if (options_.config.session_inter_op_thread_pool_size() > 0) {
@@ -518,19 +543,54 @@ Status DirectSession::Run(const RunOptions& run_options,
   // Yitao-TLS-Begin
   LOG(INFO) << "[Yitao] ****** DirectSession::Run(), we have sess_id = " << sess_id;
 
+  // // Here we hard-coded to use conditional variable to implement the TLS scheduler
+  // // Yitao-to-do: make this part more flexible instead of hard-coded...
+  // std::unique_lock<std::mutex> lk(*sched_lock);
+  // if (sess_id == 0 || sess_id == 1) {
+  //   LOG(INFO) << "[Yitao] ***@@@=== 1 ===@@@*** sess_id = " << sess_id << ", let me start!";
+  //   // sched_cv->wait(lk, [this](){return *next_run_id == sess_id;});
+  //   sched_cv->wait(lk, [this](){
+  //     if (*next_run_id == sess_id) {
+  //       LOG(INFO) << "[Yitao] ***@@@=== 2 ===@@@*** sess_id = " << sess_id << ", it is my turn!";
+  //       return true;
+  //     } else {
+  //       LOG(INFO) << "[Yitao] ***@@@=== 3 ===@@@*** sess_id = " << sess_id << ", not my turn...";
+  //       return false;
+  //     }
+  //   });
+  //   *next_run_id = -1;
+  //   LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id << ", I am done!";
+  // }
+
+  // because we will check the cv every time cv.notify_all()
+  // and we should only send the waiting sess_id once,
+  // so we will use this first_cv_check variable to guarantee that...
+  bool* first_cv_check = new bool;
+  *first_cv_check = true;
+
   // Here we hard-coded to use conditional variable to implement the TLS scheduler
   // Yitao-to-do: make this part more flexible instead of hard-coded...
   std::unique_lock<std::mutex> lk(*sched_lock);
   if (sess_id == 0 || sess_id == 1) {
     LOG(INFO) << "[Yitao] ***@@@=== 1 ===@@@*** sess_id = " << sess_id << ", let me start!";
     // sched_cv->wait(lk, [this](){return *next_run_id == sess_id;});
-    sched_cv->wait(lk, [this](){
-      if (*next_run_id == sess_id) {
-        LOG(INFO) << "[Yitao] ***@@@=== 2 ===@@@*** sess_id = " << sess_id << ", it is my turn!";
-        return true;
-      } else {
-        LOG(INFO) << "[Yitao] ***@@@=== 3 ===@@@*** sess_id = " << sess_id << ", not my turn...";
-        return false;
+    sched_cv->wait(lk, [first_cv_check, this](){
+
+      if (*first_cv_check) {
+        if (!(*someone_running)) {
+          *someone_running = true;
+          return true;
+        } else {
+          (*wait_queue).push(sess_id);
+          return false;
+        }
+      } else { // if not first_cv_check, then we don't need to worry about someone_running, just let TLS scheduler decide
+        if (*next_run_id == sess_id) {
+          *someone_running = true;
+          return true;
+        } else {
+          return false;
+        }
       }
     });
     *next_run_id = -1;

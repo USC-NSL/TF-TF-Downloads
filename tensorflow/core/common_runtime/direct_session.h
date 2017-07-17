@@ -27,6 +27,7 @@ limitations under the License.
 // I am using the thread library to start a background thread
 // for the TLS scheduler. Might update later...
 #include <thread>
+#include <queue>
 // Yitao-TLS-End
 
 #include "tensorflow/core/common_runtime/costmodel_manager.h"
@@ -125,6 +126,8 @@ class DirectSession : public Session {
   //              currently, I think it is thread_safe since its value will only be read or 
   //              modified under the conditional variable. But need to further verify.
   int* next_run_id;
+  bool* someone_running;
+  std::priority_queue<int>* wait_queue;
   // Yitao-TLS-End
 
   typedef DirectSession ME;
