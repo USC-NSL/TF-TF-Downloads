@@ -167,7 +167,14 @@ void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, in
 
 class DirectSessionFactory : public SessionFactory {
  public:
-  DirectSessionFactory() {
+  DirectSessionFactory() {}
+
+  bool AcceptsOptions(const SessionOptions& options) override {
+    return options.target.empty();
+  }
+
+  Session* NewSession(const SessionOptions& options) override {
+
     // Yitao-TLS-Begin
     // Start the TLS scheduler in a background thread.
     // Yitao-to-do: the problem here is that this DirectSessionFactory's
@@ -175,25 +182,22 @@ class DirectSessionFactory : public SessionFactory {
     //              send request to the server from the client side...
     //              So we need to find a better place to put this background thread
     //              to make sure it is only called once during the whole process.
-    LOG(INFO) << "[Yitao] Testing: DirectSessionFactory::DirectSessionFactory(), we are calling initialization function of DirectSessionFactory @@@@@@";
-    sess_count = -1;
-    sched_lock = new std::mutex;
-    LOG(INFO) << "[Yitao] *** we have sched_lock address = " << sched_lock;
-    sched_cv = new std::condition_variable;
-    next_run_id = new int;
-    *next_run_id = 1;
-    someone_running = new bool;
-    *someone_running = false;
-    wait_queue = new std::priority_queue<int>;
-    my_thread = new std::thread(TLS_scheduler, sched_lock, sched_cv, next_run_id, someone_running, wait_queue);
+    if (first_constructor_called) {
+      first_constructor_called = false;
+      LOG(INFO) << "[Yitao] Testing: DirectSessionFactory::DirectSessionFactory(), we are calling initialization function of DirectSessionFactory @@@@@@";
+      sess_count = -1;
+      sched_lock = new std::mutex;
+      LOG(INFO) << "[Yitao] *** we have sched_lock address = " << sched_lock;
+      sched_cv = new std::condition_variable;
+      next_run_id = new int;
+      *next_run_id = 1;
+      someone_running = new bool;
+      *someone_running = false;
+      wait_queue = new std::priority_queue<int>;
+      my_thread = new std::thread(TLS_scheduler, sched_lock, sched_cv, next_run_id, someone_running, wait_queue);
+    }
     // Yitao-TLS-End
-  }
 
-  bool AcceptsOptions(const SessionOptions& options) override {
-    return options.target.empty();
-  }
-
-  Session* NewSession(const SessionOptions& options) override {
     // Must do this before the CPU allocator is created.
     if (options.config.graph_options().build_cost_model() > 0) {
       EnableCPUAllocatorFullStats(true);
@@ -283,6 +287,8 @@ class DirectSessionFactory : public SessionFactory {
   std::priority_queue<int>* wait_queue;
   std::thread* my_thread;
 
+  static bool first_constructor_called;
+
   // Yitao-TLS-End
 
  private:
@@ -297,6 +303,8 @@ class DirectSessionFactory : public SessionFactory {
   // Yitao-TLS-End
 
 };
+
+bool DirectSessionFactory::first_constructor_called = true;
 
 class DirectSessionRegistrar {
  public:
