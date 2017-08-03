@@ -589,7 +589,9 @@ Status DirectSession::Run(const RunOptions& run_options,
           *someone_running = true;
           return true;
         } else {
+          LOG(INFO) << "[Yitao] @@@@@@ this is first_cv_check, but someone is running... @@@@@@";
           (*wait_queue).push(sess_id);
+          LOG(INFO) << "[Yitao]        after pushing, we have queue length = " << (*wait_queue).size();
           return false;
         }
       } else { // if not first_cv_check, then we don't need to worry about someone_running, just let TLS scheduler decide
