@@ -580,31 +580,36 @@ Status DirectSession::Run(const RunOptions& run_options,
   // Yitao-to-do: make this part more flexible instead of hard-coded...
   std::unique_lock<std::mutex> lk(*sched_lock);
   if (sess_id == 0 || sess_id == 1) {
-    LOG(INFO) << "[Yitao] ***@@@=== 1 ===@@@*** sess_id = " << sess_id << ", let me start!";
+    LOG(INFO) << "[Yitao] === 1 === sess_id = " << sess_id << ", let me start!";
     // sched_cv->wait(lk, [this](){return *next_run_id == sess_id;});
     sched_cv->wait(lk, [first_cv_check, this](){
 
       if (*first_cv_check) {
+        *first_cv_check = false;
         if (!(*someone_running)) {
           *someone_running = true;
+          LOG(INFO) << "[Yitao] === 2 === sess_id = " << sess_id << ", first check, it is my turn!";
           return true;
         } else {
-          LOG(INFO) << "[Yitao] @@@@@@ this is first_cv_check, but someone is running... @@@@@@";
+          // LOG(INFO) << "[Yitao] @@@@@@ this is first_cv_check, but someone is running... @@@@@@";
           (*wait_queue).push(sess_id);
-          LOG(INFO) << "[Yitao]        after pushing, we have queue length = " << (*wait_queue).size();
+          // LOG(INFO) << "[Yitao]        after pushing, we have queue length = " << (*wait_queue).size();
+          LOG(INFO) << "[Yitao] === 3 === sess_id = " << sess_id << ", first check, someone is running. After pushing, queue.size() = " << (*wait_queue).size();
           return false;
         }
       } else { // if not first_cv_check, then we don't need to worry about someone_running, just let TLS scheduler decide
         if (*next_run_id == sess_id) {
           *someone_running = true;
+          LOG(INFO) << "[Yitao] === 4 === sess_id = " << sess_id << ", not first check, it is my turn!";
           return true;
         } else {
+          LOG(INFO) << "[Yitao] === 5 === sess_id = " << sess_id << ", not first check, not my turn...";
           return false;
         }
       }
     });
     *next_run_id = -1;
-    LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id << ", I am done!";
+    // LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id << ", I am done!";
   }
   // Yitao-TLS-End
 
