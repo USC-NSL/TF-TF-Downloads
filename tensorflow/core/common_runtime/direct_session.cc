@@ -152,8 +152,10 @@ void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, in
     *someone_running = false;
 
     if ((*wait_queue).empty()) {
+      LOG(INFO) << "[Yitao] ****** wait_queue is empty...";
       *next_run_id = 1;
     } else {
+      LOG(INFO) << "[Yitao] ****** wait_queue has " << (*wait_queue).size() << " nodes left before poping";
       *next_run_id = (*wait_queue).top();
       (*wait_queue).pop();
     }
