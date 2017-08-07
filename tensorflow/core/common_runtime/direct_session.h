@@ -127,7 +127,7 @@ class DirectSession : public Session {
   //              modified under the conditional variable. But need to further verify.
   int* next_run_id;
   bool* someone_running;
-  std::priority_queue<int>* wait_queue;
+  std::priority_queue<int, std::vector<int>, std::greater<int>>* wait_queue;
   // Yitao-TLS-End
 
   typedef DirectSession ME;

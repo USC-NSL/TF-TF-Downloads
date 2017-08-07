@@ -128,7 +128,7 @@ string GetRendezvousKey(const string& tensor_name,
 //                  second one will be stuck infinitly. So I need to update it to make it smarter...
 //              (2) the current token-based scheduling should be more flexible. Namely, I need to
 //                  make this TLS_scheduler() module more flexbile to support different scheduling policies
-void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, int* next_run_id, bool* someone_running, std::priority_queue<int>* wait_queue) {
+void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, int* next_run_id, bool* someone_running, std::priority_queue<int, std::vector<int>, std::greater<int>>* wait_queue) {
   LOG(INFO) << "[Yitao] ****** TLS(), we are starting the TLS Scheduler!!! ******";
   int my_id = -1;
   int counter = -1;
@@ -153,11 +153,14 @@ void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, in
 
     if ((*wait_queue).empty()) {
       LOG(INFO) << "[Yitao] ****** wait_queue is empty...";
-      *next_run_id = 1;
+      *next_run_id = 1; // weird bug here, if default is 1 and send 1000 mnist concurrently.
     } else {
       LOG(INFO) << "[Yitao] ****** wait_queue has " << (*wait_queue).size() << " nodes left before poping";
       *next_run_id = (*wait_queue).top();
       (*wait_queue).pop();
+      if (!(*wait_queue).empty() && (*next_run_id) == 0) {
+        LOG(INFO) << "[Yitao] Duangduangduang, TLS is working!!!";
+      }
     }
 
     LOG(INFO) << "[Yitao] ****** TLS Scheduler decided to run next_run_id = " << *next_run_id;
@@ -195,7 +198,7 @@ class DirectSessionFactory : public SessionFactory {
       *next_run_id = 1;
       someone_running = new bool;
       *someone_running = false;
-      wait_queue = new std::priority_queue<int>;
+      wait_queue = new std::priority_queue<int, std::vector<int>, std::greater<int>>;
       my_thread = new std::thread(TLS_scheduler, sched_lock, sched_cv, next_run_id, someone_running, wait_queue);
     }
     // Yitao-TLS-End
@@ -286,7 +289,7 @@ class DirectSessionFactory : public SessionFactory {
   std::condition_variable* sched_cv;
   int* next_run_id;
   bool* someone_running;
-  std::priority_queue<int>* wait_queue;
+  std::priority_queue<int, std::vector<int>, std::greater<int>>* wait_queue;
   std::thread* my_thread;
 
   static bool first_constructor_called;
@@ -602,10 +605,10 @@ Status DirectSession::Run(const RunOptions& run_options,
       } else { // if not first_cv_check, then we don't need to worry about someone_running, just let TLS scheduler decide
         if (*next_run_id == sess_id) {
           *someone_running = true;
-          LOG(INFO) << "[Yitao] === 4 === sess_id = " << sess_id << ", not first check, it is my turn!";
+          // LOG(INFO) << "[Yitao] === 4 === sess_id = " << sess_id << ", not first check, it is my turn!";
           return true;
         } else {
-          LOG(INFO) << "[Yitao] === 5 === sess_id = " << sess_id << ", not first check, not my turn...";
+          // LOG(INFO) << "[Yitao] === 5 === sess_id = " << sess_id << ", not first check, not my turn...";
           return false;
         }
       }
