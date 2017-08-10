@@ -616,6 +616,8 @@ Status DirectSession::Run(const RunOptions& run_options,
     *next_run_id = -1;
     // LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id << ", I am done!";
   }
+
+  LOG(INFO) << "[Yitao] @@@ Actually Running, count it!!! @@@";
   // Yitao-TLS-End
 
   TF_RETURN_IF_ERROR(CheckNotClosed());
