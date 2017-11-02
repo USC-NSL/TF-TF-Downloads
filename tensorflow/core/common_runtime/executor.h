@@ -26,6 +26,11 @@ limitations under the License.
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/macros.h"
 
+// Yitao-TLS-Begin
+#include <thread>
+#include <queue>
+// Yitao-TLS-End
+
 namespace tensorflow {
 
 class StepStatsCollector;
@@ -103,6 +108,16 @@ class Executor {
                                  OpKernelContext* ctx)>
         NodeOutputsCallback;
     NodeOutputsCallback node_outputs_cb = nullptr;
+
+    // Yitao-TLS-Begin
+    int sess_id;
+    std::mutex* sched_lock;
+    std::condition_variable* sched_cv;
+    int* next_run_id;
+    bool* someone_running;
+    std::priority_queue<int, std::vector<int>, std::greater<int>>* wait_queue;
+    // Yitao-TLS-End
+
   };
   typedef std::function<void(const Status&)> DoneCallback;
   virtual void RunAsync(const Args& args, DoneCallback done) = 0;

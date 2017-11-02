@@ -27,7 +27,7 @@ limitations under the License.
 // I am using the thread library to start a background thread
 // for the TLS scheduler. Might update later...
 #include <thread>
-#include <queue>
+// #include <queue>
 // Yitao-TLS-End
 
 #include "tensorflow/core/common_runtime/costmodel_manager.h"

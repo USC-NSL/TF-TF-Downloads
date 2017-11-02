@@ -1199,6 +1199,17 @@ class ExecutorState {
   // Invoked when the execution finishes.
   Executor::DoneCallback done_cb_;
 
+  // Yitao-TLS-Begin
+  int sess_id;
+  std::mutex* sched_lock;
+  std::condition_variable* sched_cv;
+  int* next_run_id;
+  bool* someone_running;
+  std::priority_queue<int, std::vector<int>, std::greater<int>>* wait_queue;
+
+  int process_count;
+  // Yitao-TLS-End
+
   std::atomic_int_fast32_t num_outstanding_ops_;
 
   mutex mu_;
@@ -1305,6 +1316,13 @@ ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
       cancellation_manager_(args.cancellation_manager),
       runner_(args.runner),
       sync_on_finish_(args.sync_on_finish),
+      sess_id(args.sess_id),                  // Yitao-TLS-Begin
+      sched_lock(args.sched_lock),            // Yitao-TLS-Begin
+      sched_cv(args.sched_cv),                // Yitao-TLS-Begin
+      next_run_id(args.next_run_id),          // Yitao-TLS-Begin
+      someone_running(args.someone_running),  // Yitao-TLS-Begin
+      wait_queue(args.wait_queue),    // Yitao-TLS-Begin
+      process_count(0),               // Yitao-TLS-Begin
       num_outstanding_ops_(0) {
   // We start the entire execution in iteration 0 of the root frame
   // so let us create the root frame and the state for iteration 0.
@@ -1427,6 +1445,12 @@ void ExecutorState::RunAsync(Executor::DoneCallback done) {
 
   // Initialize the ready queue.
   for (const Node* n : impl_->root_nodes_) {
+
+    // Yitao-TLS-Begin
+    LOG(INFO) << "[Yitao] In RunAsync(), we have Node " << n->id() << " " << n->type_string() << " " << n->name() << " " << n->in_edges().size() << " inputs";
+
+    // Yitao-TLS-End
+
     DCHECK_EQ(n->in_edges().size(), 0);
     ready.push_back(TaggedNode{n, root_frame_, 0, false});
   }
@@ -1486,7 +1510,30 @@ struct ExecutorState::AsyncState {
   }
 };
 
+// Yitao-TLS-Begin
+bool checkNodeHasHighCost(std::string node_name) {
+  std::string high_cost_node_name_set[] = {"Conv2D"};
+  // std::string high_cost_node_name_set[] = {"Conv2D", "batchnorm", "pool", "DecodeJpeg"};
+  // std::string high_cost_node_name_set[] = {"Conv2D", "batchnorm", "pool"};
+  for (const std::string &hc_node : high_cost_node_name_set) {
+    if (node_name.compare(hc_node) == 0)
+      return true;
+  }
+  return false;
+}
+
+// Yitao-TLS-End
+
 void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
+
+  // Yitao-TLS-Begin
+  {
+    mutex_lock l(mu_);
+    process_count += 1;
+    // LOG(INFO) << "[Yitao] Now there are " << process_count << " Process() called with node " << tagged_node.node->id() << " " << tagged_node.node->type_string() << " " << tagged_node.node->name() << " " << tagged_node.node->in_edges().size() << " inputs";
+  }
+  // Yitao-TLS-End
+
   const GraphView& gview = impl_->gview_;
   TaggedNodeSeq ready;
   TaggedNodeReadyQueue inline_ready;
@@ -1522,6 +1569,13 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
   bool completed = false;
   inline_ready.push_back(tagged_node);
   while (!inline_ready.empty()) {
+
+
+
+
+
+
+
     tagged_node = inline_ready.front();
     inline_ready.pop_front();
     const Node* node = tagged_node.node;
@@ -1529,6 +1583,92 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     int64 input_iter = tagged_node.input_iter;
     const int id = node->id();
     const NodeItem& item = *gview.node(id);
+
+
+    // Yitao-TLS-Begin
+    // std::string conv2dString = "Conv2D";
+    // // if (node->type_string().compare(conv2dString) == 0) {
+    //   // LOG(INFO) << "pop Node " << id << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs";
+    // // }
+
+    // LOG(INFO) << "pop Node " << id << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs with device " << node->assigned_device_name();
+
+    // {
+    //   mutex_lock l(mu_);
+    //   std::string recvString = "_Recv";
+    //   // if (node->type_string().compare(recvString) == 0) {
+    //   if (item.kernel_is_expensive) {
+    //     LOG(INFO) << "pop Node " << id << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs";
+    //     for (const Edge* e : node->in_edges()) {
+    //       LOG(INFO) << "    Edge from " << e->src()->id() << "  " << e->src()->name() << " fanout " << e->src()->out_edges().size();
+    //     }
+    //     for (const Edge* e : node->out_edges()) {
+    //       LOG(INFO) << "    Edge to " << e->dst()->id() << "  " << e->dst()->name() << " fanin " << e->dst()->in_edges().size();
+    //     }
+    //   }
+    // }
+
+
+    // if (node->type_string().compare(conv2dString) == 0) {
+    if (checkNodeHasHighCost(node->type_string())) {
+      // LOG(INFO) << "Node " << node->id() << " " << node->type_string() << " " << node->name() << " " << "has high cost!";
+      // because we will check the cv every time cv.notify_all()
+      // and we should only send the waiting sess_id once,
+      // so we will use this first_cv_check variable to guarantee that...
+      bool* first_cv_check = new bool;
+      *first_cv_check = true;
+
+      // Here we hard-coded to use conditional variable to implement the TLS scheduler
+      // Yitao-to-do: make this part more flexible instead of hard-coded...
+      // std::unique_lock<std::mutex> lk(*sched_lock);
+      if (sess_id == 0 || sess_id == 1) {
+        std::unique_lock<std::mutex> lk(*sched_lock);
+        // LOG(INFO) << "[Yitao] === 1 === sess_id = " << sess_id << ", let me start!";
+        // sched_cv->wait(lk, [this](){return *next_run_id == sess_id;});
+
+        // auto t1 = std::chrono::high_resolution_clock::now();
+
+        sched_cv->wait(lk, [first_cv_check, this](){
+          // return true;
+          if (*first_cv_check) {
+            *first_cv_check = false;
+            if (!(*someone_running)) {
+              *someone_running = true;
+              // LOG(INFO) << "[Yitao] === 2 === sess_id = " << sess_id << ", first check, it is my turn!";
+              return true;
+            } else {
+              // LOG(INFO) << "[Yitao] @@@@@@ this is first_cv_check, but someone is running... @@@@@@";
+              (*wait_queue).push(sess_id);
+              // LOG(INFO) << "[Yitao]        after pushing, we have queue length = " << (*wait_queue).size();
+              // LOG(INFO) << "[Yitao] === 3 === sess_id = " << sess_id << ", first check, someone is running. After pushing, queue.size() = " << (*wait_queue).size();
+              return false;
+            }
+          } else { // if not first_cv_check, then we don't need to worry about someone_running, just let TLS scheduler decide
+            if (*next_run_id == sess_id) {
+              *someone_running = true;
+              // LOG(INFO) << "[Yitao] === 4 === sess_id = " << sess_id << ", not first check, it is my turn!";
+              return true;
+            } else {
+              // LOG(INFO) << "[Yitao] === 5 === sess_id = " << sess_id << ", not first check, not my turn...";
+              return false;
+            }
+          }
+        });
+
+        // auto t2 = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double, std::milli> fp_ms = t2 - t1;
+        // LOG(INFO) << "[Yitao] " << fp_ms.count() * 1000 * 1000 << " ns\n";
+
+        *next_run_id = -1;
+        // LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id << ", I am done!";
+      }
+
+      // LOG(INFO) << "[Yitao] @@@ Actually Running, count it!!! @@@";
+      
+    }
+    // Yitao-TLS-End
+
+
 
     // TODO(misard) Replace with a finer-grain enabling flag once we
     // add better optional debugging support.
@@ -1649,7 +1789,80 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
         // Synchronous computes.
         OpKernelContext ctx(&params, item.num_outputs);
         if (stats) nodestats::SetOpStart(stats);
+
+        // // Yitao-TLS-Begin
+        // // LOG(INFO) << "pop Node " << node->id() << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs";
+        //     // std::string conv2dString = "Conv2D";
+        // // if (node->type_string().compare(conv2dString) == 0) {
+        //   // LOG(INFO) << "pop Node " << id << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs";
+        // // }
+
+
+        // // if (node->type_string().compare(conv2dString) == 0) {
+
+        //   // because we will check the cv every time cv.notify_all()
+        //   // and we should only send the waiting sess_id once,
+        //   // so we will use this first_cv_check variable to guarantee that...
+        //   bool* first_cv_check = new bool;
+        //   *first_cv_check = true;
+
+        //   // Here we hard-coded to use conditional variable to implement the TLS scheduler
+        //   // Yitao-to-do: make this part more flexible instead of hard-coded...
+        //   std::unique_lock<std::mutex> lk(*sched_lock);
+        //   if (sess_id == 0 || sess_id == 1) {
+        //     // LOG(INFO) << "[Yitao] === 1 === sess_id = " << sess_id << ", let me start!";
+        //     // sched_cv->wait(lk, [this](){return *next_run_id == sess_id;});
+        //     sched_cv->wait(lk, [first_cv_check, this]()
+        //     {
+        //       return true;
+        //       // if (*first_cv_check) {
+        //       //   *first_cv_check = false;
+        //       //   if (!(*someone_running)) {
+        //       //     *someone_running = true;
+        //       //     // LOG(INFO) << "[Yitao] === 2 === sess_id = " << sess_id << ", first check, it is my turn!";
+        //       //     return true;
+        //       //   } else {
+        //       //     // LOG(INFO) << "[Yitao] @@@@@@ this is first_cv_check, but someone is running... @@@@@@";
+        //       //     (*wait_queue).push(sess_id);
+        //       //     // LOG(INFO) << "[Yitao]        after pushing, we have queue length = " << (*wait_queue).size();
+        //       //     // LOG(INFO) << "[Yitao] === 3 === sess_id = " << sess_id << ", first check, someone is running. After pushing, queue.size() = " << (*wait_queue).size();
+        //       //     return false;
+        //       //   }
+        //       // } else { // if not first_cv_check, then we don't need to worry about someone_running, just let TLS scheduler decide
+        //       //   if (*next_run_id == sess_id) {
+        //       //     *someone_running = true;
+        //       //     // LOG(INFO) << "[Yitao] === 4 === sess_id = " << sess_id << ", not first check, it is my turn!";
+        //       //     return true;
+        //       //   } else {
+        //       //     // LOG(INFO) << "[Yitao] === 5 === sess_id = " << sess_id << ", not first check, not my turn...";
+        //       //     return false;
+        //       //   }
+        //       // }
+        //     }
+        //     );
+        //     *next_run_id = -1;
+        //     // LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id << ", I am done!";
+        //   }
+
+        //   // LOG(INFO) << "[Yitao] @@@ Actually Running, count it!!! @@@";
+          
+        // // }
+        // // Yitao-TLS-End
+
         device->Compute(CHECK_NOTNULL(op_kernel), &ctx);
+
+        // // Yitao-TLS-Begin
+        // // if (node->type_string().compare(conv2dString) == 0) {      
+        //   // Here we hard-coded to use conditional variable to implement the TLS scheduler
+        //   // Yitao-to-do: make this part more flexible instead of hard-coded...
+        //   if (sess_id == 0 || sess_id == 1) {
+        //     sched_cv->notify_all();
+        //   }
+          
+        // // }
+        // // Yitao-TLS-End
+
+
         if (stats) nodestats::SetOpEnd(stats);
 
         s = ProcessOutputs(item, &ctx, &outputs, stats);
@@ -1685,6 +1898,20 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
       // Postprocess.
       completed = NodeDone(s, item.node, ready, stats, &inline_ready);
     }
+
+
+    // Yitao-TLS-Begin
+    // if (node->type_string().compare(conv2dString) == 0) {      
+      // Here we hard-coded to use conditional variable to implement the TLS scheduler
+      // Yitao-to-do: make this part more flexible instead of hard-coded...
+      if (sess_id == 0 || sess_id == 1) {
+        sched_cv->notify_all();
+      }
+      
+    // }
+    // Yitao-TLS-End
+
+
   }  // while !inline_ready.empty()
 
   // This thread of computation is done if completed = true.

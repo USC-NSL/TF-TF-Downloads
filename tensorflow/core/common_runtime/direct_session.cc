@@ -152,10 +152,10 @@ void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, in
     *someone_running = false;
 
     if ((*wait_queue).empty()) {
-      LOG(INFO) << "[Yitao] ****** wait_queue is empty...";
-      *next_run_id = 1; // weird bug here, if default is 1 and send 1000 mnist concurrently.
+      // LOG(INFO) << "[Yitao] ****** wait_queue is empty...";
+      *next_run_id = 0; // weird bug here, if default is 1 and send 1000 mnist concurrently.
     } else {
-      LOG(INFO) << "[Yitao] ****** wait_queue has " << (*wait_queue).size() << " nodes left before poping";
+      // LOG(INFO) << "[Yitao] ****** wait_queue has " << (*wait_queue).size() << " nodes left before poping";
       *next_run_id = (*wait_queue).top();
       (*wait_queue).pop();
       if (!(*wait_queue).empty() && (*next_run_id) == 0) {
@@ -163,7 +163,7 @@ void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, in
       }
     }
 
-    LOG(INFO) << "[Yitao] ****** TLS Scheduler decided to run next_run_id = " << *next_run_id;
+    // LOG(INFO) << "[Yitao] ****** TLS Scheduler decided to run next_run_id = " << *next_run_id;
 
     sched_cv->notify_all();
   }
@@ -174,6 +174,10 @@ class DirectSessionFactory : public SessionFactory {
  public:
   DirectSessionFactory() {}
 
+  // Yitao-TLS-Begin
+  ~DirectSessionFactory() {my_thread->join();}
+  // Yitao-TLS-End
+
   bool AcceptsOptions(const SessionOptions& options) override {
     return options.target.empty();
   }
@@ -182,11 +186,11 @@ class DirectSessionFactory : public SessionFactory {
 
     // Yitao-TLS-Begin
     // Start the TLS scheduler in a background thread.
-    // Yitao-to-do: the problem here is that this DirectSessionFactory's
-    //              constructor function will be called everytime a client
-    //              send request to the server from the client side...
-    //              So we need to find a better place to put this background thread
-    //              to make sure it is only called once during the whole process.
+    // Yitao-to-do: the problem here is that first_constructor_called
+    //              is not thread safe. If two Sessions are created concurrently,
+    //              then there will be a contension on this first_constructor_called.
+    //              Though in current version, it is unlikely that two Sessions
+    //              are created concurrently, but maybe a problem in future.
     if (first_constructor_called) {
       first_constructor_called = false;
       LOG(INFO) << "[Yitao] Testing: DirectSessionFactory::DirectSessionFactory(), we are calling initialization function of DirectSessionFactory @@@@@@";
@@ -239,14 +243,14 @@ class DirectSessionFactory : public SessionFactory {
     // is that the constructor function is also called by the client python script.
     // So if I put the start of TLS scheduler in the contructor function,
     // then we will have multiple TLS scheduler...
-    if (GetSessionCount() == 1) {
+    // if (GetSessionCount() == 1) {
       // sched_lock = new std::mutex;
       // LOG(INFO) << "[Yitao] *** we have sched_lock address = " << sched_lock;
       // sched_cv = new std::condition_variable;
       // next_run_id = new int;
       // *next_run_id = 1;
       // my_thread = new std::thread(TLS_scheduler, sched_lock, sched_cv, next_run_id);
-    }
+    // }
     // Yitao-TLS-End
 
     return session;
@@ -551,74 +555,55 @@ Status DirectSession::Run(const RunOptions& run_options,
                           std::vector<Tensor>* outputs,
                           RunMetadata* run_metadata) {
 
-  LOG(INFO) << "[Yitao] ****** DirectSession::Run() ******";
-
-  // Yitao-TLS-Begin
+  // LOG(INFO) << "[Yitao] ****** DirectSession::Run() ******";
   LOG(INFO) << "[Yitao] ****** DirectSession::Run(), we have sess_id = " << sess_id;
+
+  // // Yitao-TLS-Begin
+
+  // // because we will check the cv every time cv.notify_all()
+  // // and we should only send the waiting sess_id once,
+  // // so we will use this first_cv_check variable to guarantee that...
+  // bool* first_cv_check = new bool;
+  // *first_cv_check = true;
 
   // // Here we hard-coded to use conditional variable to implement the TLS scheduler
   // // Yitao-to-do: make this part more flexible instead of hard-coded...
   // std::unique_lock<std::mutex> lk(*sched_lock);
   // if (sess_id == 0 || sess_id == 1) {
-  //   LOG(INFO) << "[Yitao] ***@@@=== 1 ===@@@*** sess_id = " << sess_id << ", let me start!";
+  //   // LOG(INFO) << "[Yitao] === 1 === sess_id = " << sess_id << ", let me start!";
   //   // sched_cv->wait(lk, [this](){return *next_run_id == sess_id;});
-  //   sched_cv->wait(lk, [this](){
-  //     if (*next_run_id == sess_id) {
-  //       LOG(INFO) << "[Yitao] ***@@@=== 2 ===@@@*** sess_id = " << sess_id << ", it is my turn!";
-  //       return true;
-  //     } else {
-  //       LOG(INFO) << "[Yitao] ***@@@=== 3 ===@@@*** sess_id = " << sess_id << ", not my turn...";
-  //       return false;
+  //   sched_cv->wait(lk, [first_cv_check, this](){
+
+  //     if (*first_cv_check) {
+  //       *first_cv_check = false;
+  //       if (!(*someone_running)) {
+  //         *someone_running = true;
+  //         // LOG(INFO) << "[Yitao] === 2 === sess_id = " << sess_id << ", first check, it is my turn!";
+  //         return true;
+  //       } else {
+  //         // LOG(INFO) << "[Yitao] @@@@@@ this is first_cv_check, but someone is running... @@@@@@";
+  //         (*wait_queue).push(sess_id);
+  //         // LOG(INFO) << "[Yitao]        after pushing, we have queue length = " << (*wait_queue).size();
+  //         // LOG(INFO) << "[Yitao] === 3 === sess_id = " << sess_id << ", first check, someone is running. After pushing, queue.size() = " << (*wait_queue).size();
+  //         return false;
+  //       }
+  //     } else { // if not first_cv_check, then we don't need to worry about someone_running, just let TLS scheduler decide
+  //       if (*next_run_id == sess_id) {
+  //         *someone_running = true;
+  //         // LOG(INFO) << "[Yitao] === 4 === sess_id = " << sess_id << ", not first check, it is my turn!";
+  //         return true;
+  //       } else {
+  //         // LOG(INFO) << "[Yitao] === 5 === sess_id = " << sess_id << ", not first check, not my turn...";
+  //         return false;
+  //       }
   //     }
   //   });
   //   *next_run_id = -1;
-  //   LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id << ", I am done!";
+  //   // LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id << ", I am done!";
   // }
 
-  // because we will check the cv every time cv.notify_all()
-  // and we should only send the waiting sess_id once,
-  // so we will use this first_cv_check variable to guarantee that...
-  bool* first_cv_check = new bool;
-  *first_cv_check = true;
-
-  // Here we hard-coded to use conditional variable to implement the TLS scheduler
-  // Yitao-to-do: make this part more flexible instead of hard-coded...
-  std::unique_lock<std::mutex> lk(*sched_lock);
-  if (sess_id == 0 || sess_id == 1) {
-    LOG(INFO) << "[Yitao] === 1 === sess_id = " << sess_id << ", let me start!";
-    // sched_cv->wait(lk, [this](){return *next_run_id == sess_id;});
-    sched_cv->wait(lk, [first_cv_check, this](){
-
-      if (*first_cv_check) {
-        *first_cv_check = false;
-        if (!(*someone_running)) {
-          *someone_running = true;
-          LOG(INFO) << "[Yitao] === 2 === sess_id = " << sess_id << ", first check, it is my turn!";
-          return true;
-        } else {
-          // LOG(INFO) << "[Yitao] @@@@@@ this is first_cv_check, but someone is running... @@@@@@";
-          (*wait_queue).push(sess_id);
-          // LOG(INFO) << "[Yitao]        after pushing, we have queue length = " << (*wait_queue).size();
-          LOG(INFO) << "[Yitao] === 3 === sess_id = " << sess_id << ", first check, someone is running. After pushing, queue.size() = " << (*wait_queue).size();
-          return false;
-        }
-      } else { // if not first_cv_check, then we don't need to worry about someone_running, just let TLS scheduler decide
-        if (*next_run_id == sess_id) {
-          *someone_running = true;
-          // LOG(INFO) << "[Yitao] === 4 === sess_id = " << sess_id << ", not first check, it is my turn!";
-          return true;
-        } else {
-          // LOG(INFO) << "[Yitao] === 5 === sess_id = " << sess_id << ", not first check, not my turn...";
-          return false;
-        }
-      }
-    });
-    *next_run_id = -1;
-    // LOG(INFO) << "[Yitao] ***@@@=== 4 ===@@@*** sess_id = " << sess_id << ", I am done!";
-  }
-
-  LOG(INFO) << "[Yitao] @@@ Actually Running, count it!!! @@@";
-  // Yitao-TLS-End
+  // // LOG(INFO) << "[Yitao] @@@ Actually Running, count it!!! @@@";
+  // // Yitao-TLS-End
 
   TF_RETURN_IF_ERROR(CheckNotClosed());
   direct_session_runs->GetCell()->IncrementBy(1);
@@ -763,6 +748,17 @@ Status DirectSession::Run(const RunOptions& run_options,
     return errors::Cancelled("Run call was cancelled");
   }
 
+  // Yitao-TLS-Begin
+  args.sess_id = sess_id;
+  args.sched_lock = sched_lock;
+  args.sched_cv = sched_cv;
+  args.next_run_id = next_run_id;
+  args.someone_running = someone_running;
+  args.wait_queue = wait_queue;
+
+  LOG(INFO) << "[Yitao] There are " << num_executors << " Executors in executors_and_keys...";
+  // Yitao-TLS-End
+
   for (const auto& item : executors_and_keys->items) {
     item.executor->RunAsync(args, barrier->Get());
   }
@@ -833,6 +829,14 @@ Status DirectSession::Run(const RunOptions& run_options,
       TF_RETURN_IF_ERROR(
           cost_model_manager_.AddToCostGraphDef(item.graph, cost_graph));
     }
+
+    // // Yitao-TLS-Begin
+    // for (int i = 0; i < cost_graph.node_size(); i++) {
+    //   const auto& myNode = cost_graph.node(i);
+    //   LOG(INFO) << "[Yitao] CostModel node " << myNode.id() << "-" << myNode.name() << "-" << myNode.device() << ":" << myNode.compute_cost();
+    // }
+    // // Yitao-TLS-End
+
   }
 
   // If requested via RunOptions, output the partition graphs.
@@ -846,13 +850,15 @@ Status DirectSession::Run(const RunOptions& run_options,
     }
   }
 
-  // Yitao-TLS-Begin
-  // Here we hard-coded to use conditional variable to implement the TLS scheduler
-  // Yitao-to-do: make this part more flexible instead of hard-coded...
-  if (sess_id == 0 || sess_id == 1) {
-    sched_cv->notify_all();
-  }
-  // Yitao-TLS-End
+  // // Yitao-TLS-Begin
+  // // Here we hard-coded to use conditional variable to implement the TLS scheduler
+  // // Yitao-to-do: make this part more flexible instead of hard-coded...
+  // if (sess_id == 0 || sess_id == 1) {
+  //   sched_cv->notify_all();
+  // }
+  // // Yitao-TLS-End
+
+  LOG(INFO) << "[Yitao] Finished one DirectSession::Run()!";
 
   return Status::OK();
 }
@@ -1357,7 +1363,7 @@ Status DirectSession::GetOrCreateExecutors(
     };
     params.node_outputs_cb = node_outputs_callback_;
 
-    optimizer.Optimize(lib, options_.env, device, &iter->second);
+    // optimizer.Optimize(lib, options_.env, device, &iter->second);
 
     // EXPERIMENTAL: tfdbg inserts debug nodes in the graph.
     if (!options.debug_options.debug_tensor_watch_opts().empty()) {
