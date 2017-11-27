@@ -152,10 +152,10 @@ void TLS_scheduler(std::mutex* sched_lock, std::condition_variable* sched_cv, in
     *someone_running = false;
 
     if ((*wait_queue).empty()) {
-      // LOG(INFO) << "[Yitao] ****** wait_queue is empty...";
+      LOG(INFO) << "[Yitao] ****** wait_queue is empty...";
       *next_run_id = 0; // weird bug here, if default is 1 and send 1000 mnist concurrently.
     } else {
-      // LOG(INFO) << "[Yitao] ****** wait_queue has " << (*wait_queue).size() << " nodes left before poping";
+      LOG(INFO) << "[Yitao] ****** wait_queue has " << (*wait_queue).size() << " nodes left before poping";
       *next_run_id = (*wait_queue).top();
       (*wait_queue).pop();
       if (!(*wait_queue).empty() && (*next_run_id) == 0) {
@@ -380,6 +380,7 @@ DirectSession::DirectSession(const SessionOptions& options,
   next_run_id = factory_->next_run_id;
   someone_running = factory_->someone_running;
   wait_queue = factory_->wait_queue;
+  sess_run_count = -1;
   // Yitao-TLS-End
 
   if (options_.config.session_inter_op_thread_pool_size() > 0) {
@@ -557,6 +558,13 @@ Status DirectSession::Run(const RunOptions& run_options,
 
   // LOG(INFO) << "[Yitao] ****** DirectSession::Run() ******";
   LOG(INFO) << "[Yitao] ****** DirectSession::Run(), we have sess_id = " << sess_id;
+  int sess_run_id;
+  {
+    mutex_lock l(sess_run_count_lock);
+    sess_run_count += 1;
+    sess_run_id = sess_run_count;
+  }
+  LOG(INFO) << "[Yitao] ****** DirectSession::Run(), we have sess_run_id = " << sess_run_id;
 
   // // Yitao-TLS-Begin
 
@@ -568,8 +576,9 @@ Status DirectSession::Run(const RunOptions& run_options,
 
   // // Here we hard-coded to use conditional variable to implement the TLS scheduler
   // // Yitao-to-do: make this part more flexible instead of hard-coded...
-  // std::unique_lock<std::mutex> lk(*sched_lock);
+  // // std::unique_lock<std::mutex> lk(*sched_lock);
   // if (sess_id == 0 || sess_id == 1) {
+  //   std::unique_lock<std::mutex> lk(*sched_lock);
   //   // LOG(INFO) << "[Yitao] === 1 === sess_id = " << sess_id << ", let me start!";
   //   // sched_cv->wait(lk, [this](){return *next_run_id == sess_id;});
   //   sched_cv->wait(lk, [first_cv_check, this](){
@@ -715,6 +724,18 @@ Status DirectSession::Run(const RunOptions& run_options,
           ((measure_step_count + 1) % build_cost_model_every == 0);
     }
   }
+
+  // Yitao-TLS-Begin
+  // simpliy set update_cost_model as true
+  // sess_run_id = 0 and 1 is for model loading
+  // sess_run_id = 2 will have much longer overhead
+  // so we pick sess_run_id = 5, just for fun...
+  int sess_run_threshold = 5;
+  bool force_trace_and_update_cost_model = false;
+  if (force_trace_and_update_cost_model && sess_run_id >= sess_run_threshold)
+    update_cost_model = true;
+  // Yitao-TLS-End
+
   if (do_trace || update_cost_model) {
     run_state.collector.reset(
         new StepStatsCollector(run_metadata->mutable_step_stats()));
@@ -722,8 +743,15 @@ Status DirectSession::Run(const RunOptions& run_options,
   }
 
 #if GOOGLE_CUDA
+
+  // LOG(INFO) << "[Yitao] @@@@@@ GOOGLE_CUDA = true @@@@@@";
+
   std::unique_ptr<GPUTracer> tracer;
-  if (run_options.trace_level() >= RunOptions::HARDWARE_TRACE) {
+  // if (run_options.trace_level() >= RunOptions::HARDWARE_TRACE) {
+  if (force_trace_and_update_cost_model && sess_run_id >= sess_run_threshold) {
+
+    LOG(INFO) << "[Yitao] @@@@@@ Yes, we are starting GPU Tracer! @@@@@@";
+
     tracer.reset(CreateGPUTracer());
     // tracer will be NULL on non-GPU platforms.
     // TODO(b/32704451): Don't just ignore the ::tensorflow::Status object!
@@ -778,6 +806,9 @@ Status DirectSession::Run(const RunOptions& run_options,
 #if GOOGLE_CUDA
   if (tracer) {
     // TODO(b/32704451): Don't just ignore the ::tensorflow::Status object!
+
+    LOG(INFO) << "[Yitao] @@@@@@ Yes, we are stopping GPU Tracer! @@@@@@";
+
     tracer->Stop().IgnoreError();
     tracer->Collect(args.stats_collector).IgnoreError();
   }
@@ -820,6 +851,8 @@ Status DirectSession::Run(const RunOptions& run_options,
       const Graph* graph = partition.graph;
       const string device = partition.flib->device()->name();
       device_to_graph[device] = graph;
+
+      // LOG(INFO) << "[Yitao] we have device: " << device;
     }
     args.stats_collector->BuildCostModel(&cost_model_manager_, device_to_graph);
 
@@ -831,9 +864,9 @@ Status DirectSession::Run(const RunOptions& run_options,
     }
 
     // // Yitao-TLS-Begin
-    // for (int i = 0; i < cost_graph.node_size(); i++) {
-    //   const auto& myNode = cost_graph.node(i);
-    //   LOG(INFO) << "[Yitao] CostModel node " << myNode.id() << "-" << myNode.name() << "-" << myNode.device() << ":" << myNode.compute_cost();
+    // for (int i = 0; i < cost_graph->node_size(); i++) {
+    //   const auto& myNode = cost_graph->node(i);
+    //   LOG(INFO) << "[Yitao] CostModel node " << myNode.id() << "-" << myNode.name() << "-" << myNode.device() << "-" << myNode.compute_cost();
     // }
     // // Yitao-TLS-End
 
@@ -1300,6 +1333,8 @@ Status DirectSession::GetOrCreateExecutors(
                                   run_state_args, &ek->input_types,
                                   &ek->output_types));
 
+  // LOG(INFO) << "[Yitao] @@@@@@ graphs.size() = " << graphs.size() << " @@@@@@";
+
   if (run_state_args->is_partial_run) {
     ek->graph = std::move(run_state_args->graph);
     std::unordered_set<StringPiece, StringPiece::Hasher> names;
@@ -1324,6 +1359,9 @@ Status DirectSession::GetOrCreateExecutors(
   for (auto iter = graphs.begin(); iter != graphs.end(); ++iter) {
     const string& partition_name = iter->first;
     std::unique_ptr<Graph>& partition_graph = iter->second;
+
+    LOG(INFO) << "[Yitao] @@@@@@ graph.num_nodes() = " << partition_graph->num_nodes() << " @@@@@@";
+
     const int graph_def_version = partition_graph->versions().producer();
 
     Device* device;
@@ -1363,7 +1401,10 @@ Status DirectSession::GetOrCreateExecutors(
     };
     params.node_outputs_cb = node_outputs_callback_;
 
+    // // Yitao-TLS-Begin
+    // // this Optimize(...) is conflict with my node-level scheduling...
     // optimizer.Optimize(lib, options_.env, device, &iter->second);
+    // // Yitao-TLS-End
 
     // EXPERIMENTAL: tfdbg inserts debug nodes in the graph.
     if (!options.debug_options.debug_tensor_watch_opts().empty()) {
@@ -1436,6 +1477,9 @@ Status DirectSession::CreateGraphs(
     std::unique_ptr<FunctionLibraryDefinition>* flib_def,
     RunStateArgs* run_state_args, DataTypeVector* input_types,
     DataTypeVector* output_types) {
+
+  LOG(INFO) << "[Yitao] @@@@@@ CreateGraphs() is called @@@@@@";
+
   mutex_lock l(graph_def_lock_);
   std::unique_ptr<SimpleClientGraph> client_graph;
 

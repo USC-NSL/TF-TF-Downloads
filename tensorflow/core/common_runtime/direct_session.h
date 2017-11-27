@@ -128,6 +128,8 @@ class DirectSession : public Session {
   int* next_run_id;
   bool* someone_running;
   std::priority_queue<int, std::vector<int>, std::greater<int>>* wait_queue;
+  int sess_run_count;
+  mutex sess_run_count_lock;
   // Yitao-TLS-End
 
   typedef DirectSession ME;
