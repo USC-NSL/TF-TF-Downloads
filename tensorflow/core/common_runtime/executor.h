@@ -149,6 +149,9 @@ class Executor {
     std::priority_queue<sessRunInfo>* TLS_queue;
 
     int sess_run_id;
+
+    bool* cost_model_generated;
+    std::unordered_map<string, int>* TLS_cost_model; 
     // Yitao-TLS-End
 
   };

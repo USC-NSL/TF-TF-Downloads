@@ -1215,6 +1215,9 @@ class ExecutorState {
 
   int sess_run_id;
 
+  bool* cost_model_generated;
+  std::unordered_map<string, int>* TLS_cost_model; 
+
   int process_count;
   // Yitao-TLS-End
 
@@ -1324,15 +1327,17 @@ ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
       cancellation_manager_(args.cancellation_manager),
       runner_(args.runner),
       sync_on_finish_(args.sync_on_finish),
-      sess_id(args.sess_id),                    // Yitao-TLS-Begin
-      next_sess_id(args.next_sess_id),          // Yitao-TLS-Begin
-      next_sess_run_id(args.next_sess_run_id),  // Yitao-TLS-Begin
-      notify_done(args.notify_done),            // Yitao-TLS-Begin
-      sched_lock(args.sched_lock),              // Yitao-TLS-Begin
-      TLS_cv(args.TLS_cv),                      // Yitao-TLS-Begin
-      sched_cv(args.sched_cv),                  // Yitao-TLS-Begin
-      TLS_queue(args.TLS_queue),                // Yitao-TLS-Begin
-      sess_run_id(args.sess_run_id),            // Yitao-TLS-Begin
+      sess_id(args.sess_id),                            // Yitao-TLS-Begin
+      next_sess_id(args.next_sess_id),                  // Yitao-TLS-Begin
+      next_sess_run_id(args.next_sess_run_id),          // Yitao-TLS-Begin
+      notify_done(args.notify_done),                    // Yitao-TLS-Begin
+      sched_lock(args.sched_lock),                      // Yitao-TLS-Begin
+      TLS_cv(args.TLS_cv),                              // Yitao-TLS-Begin
+      sched_cv(args.sched_cv),                          // Yitao-TLS-Begin
+      TLS_queue(args.TLS_queue),                        // Yitao-TLS-Begin
+      sess_run_id(args.sess_run_id),                    // Yitao-TLS-Begin
+      cost_model_generated(args.cost_model_generated),  // Yitao-TLS-Begin
+      TLS_cost_model(args.TLS_cost_model),              // Yitao-TLS-Begin
       process_count(0),               // Yitao-TLS-Begin
       num_outstanding_ops_(0) {
   // We start the entire execution in iteration 0 of the root frame
@@ -1522,18 +1527,27 @@ struct ExecutorState::AsyncState {
 };
 
 // Yitao-TLS-Begin
-bool checkNodeHasHighCost(std::string node_name) {
-  std::string high_cost_node_name_set[] = {"Conv2D"};
-  // std::string high_cost_node_name_set[] = {"Conv2D", "batchnorm", "pool", "DecodeJpeg"};
-  // std::string high_cost_node_name_set[] = {"Conv2D", "batchnorm", "pool"};
-  for (const std::string &hc_node : high_cost_node_name_set) {
-    // if (node_name.compare(hc_node) == 0)
-    if (node_name.find(hc_node) != std::string::npos) {
-      // LOG(INFO) << "[Yitao] Biubiubiu for node " << node_name;
-      return true;
-    }
+bool checkNodeHasHighCost(std::string node_name, std::unordered_map<string, int>* TLS_cost_model) {
+  // std::string high_cost_node_name_set[] = {"Conv2D"};
+  // // std::string high_cost_node_name_set[] = {"Conv2D", "batchnorm", "pool", "DecodeJpeg"};
+  // // std::string high_cost_node_name_set[] = {"Conv2D", "batchnorm", "pool"};
+  // for (const std::string &hc_node : high_cost_node_name_set) {
+  //   // if (node_name.compare(hc_node) == 0)
+  //   if (node_name.find(hc_node) != std::string::npos) {
+  //     // LOG(INFO) << "[Yitao] Biubiubiu for node " << node_name;
+  //     return true;
+  //   }
+  // }
+  // return false;
+
+  if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
+    // LOG(INFO) << "[Yitao] Biubiubiu for node " << node_name << " with cost of " << (*TLS_cost_model)[node_name];
+    return true;
+  } else {
+    return false;
   }
-  return false;
+
+  // return false;
 }
 
 // Yitao-TLS-End
@@ -1601,38 +1615,40 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
 
     // Yitao-TLS-Begin
     // LOG(INFO) << "pop Node " << id << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs with device " << node->assigned_device_name();
-    
-    if (checkNodeHasHighCost(node->type_string())) { // <====== should_we_push_this_node(node) for node level scheduling here
-      {
-        // since we are modifying the shared TLS_queue,
-        // we need sched_lock to protect it.
-        std::unique_lock<std::mutex> lk(*sched_lock);
-        TLS_queue->push(sessRunInfo(sess_id, sess_run_id));
-        // LOG(INFO) << "[Process] pushing sess_id = " << sess_id << ", sess_run_id = " << sess_run_id << " to queue! After push, TLS_queue->size = " << TLS_queue->size();
-      }
 
-      // notify TLS_scheduler to schedule the next node in TLS queue
-      TLS_cv->notify_all();
+    if (*cost_model_generated) {
+      if (checkNodeHasHighCost(node->name(), TLS_cost_model)) { // <====== should_we_push_this_node(node) for node level scheduling here
+        {
+          // since we are modifying the shared TLS_queue,
+          // we need sched_lock to protect it.
+          std::unique_lock<std::mutex> lk(*sched_lock);
+          TLS_queue->push(sessRunInfo(sess_id, sess_run_id));
+          // LOG(INFO) << "[Process] pushing sess_id = " << sess_id << ", sess_run_id = " << sess_run_id << " to queue! After push, TLS_queue->size = " << TLS_queue->size();
+        }
 
-      {
-        std::unique_lock<std::mutex> lk(*sched_lock);
-        sched_cv->wait(lk, [this](){
-          // print some meta-data for debuging
-          bool tmp = *next_sess_id == sess_id && *next_sess_run_id == sess_run_id;
-          // LOG(INFO) << "[meta] sess_id = " << sess_id << ", sess_run_id = " << sess_run_id << ", next_sess_id = " << *next_sess_id << ", next_sess_run_id = " << *next_sess_run_id << ((tmp) ? " => true" : " => false");
-          
-          // reset next_sess_id and next_sess_run_id.
-          // Without doing so, then if next Sess.run() happen to have the same sess_id,
-          // it will be executed as well as be pushed into the queue, leading to bug
-          if (tmp) {
-            *next_sess_id = -1;
-            *next_sess_run_id = -1;
-          }
-          return tmp;
-        });
-        // If we reach this point, TLS_scheduler's notify_all() has worked,
-        // so we can stop TLS_scheduler's while loop for notify_all().
-        *notify_done = true;
+        // notify TLS_scheduler to schedule the next node in TLS queue
+        TLS_cv->notify_all();
+
+        {
+          std::unique_lock<std::mutex> lk(*sched_lock);
+          sched_cv->wait(lk, [this](){
+            // print some meta-data for debuging
+            bool tmp = *next_sess_id == sess_id && *next_sess_run_id == sess_run_id;
+            // LOG(INFO) << "[meta] sess_id = " << sess_id << ", sess_run_id = " << sess_run_id << ", next_sess_id = " << *next_sess_id << ", next_sess_run_id = " << *next_sess_run_id << ((tmp) ? " => true" : " => false");
+            
+            // reset next_sess_id and next_sess_run_id.
+            // Without doing so, then if next Sess.run() happen to have the same sess_id,
+            // it will be executed as well as be pushed into the queue, leading to bug
+            if (tmp) {
+              *next_sess_id = -1;
+              *next_sess_run_id = -1;
+            }
+            return tmp;
+          });
+          // If we reach this point, TLS_scheduler's notify_all() has worked,
+          // so we can stop TLS_scheduler's while loop for notify_all().
+          *notify_done = true;
+        }
       }
     }
     // Yitao-TLS-End
@@ -1870,8 +1886,10 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
 
 
     // Yitao-TLS-Begin
-    if (checkNodeHasHighCost(node->type_string())) { // <====== should_we_push_this_node(node) for node level scheduling here
-      TLS_cv->notify_all();
+    if (*cost_model_generated) {
+      if (checkNodeHasHighCost(node->name(), TLS_cost_model)) { // <====== should_we_push_this_node(node) for node level scheduling here
+        TLS_cv->notify_all();
+      }
     }
     // Yitao-TLS-End
 

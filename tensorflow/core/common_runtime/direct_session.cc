@@ -430,10 +430,10 @@ DirectSession::DirectSession(const SessionOptions& options,
   // might consider put sess_run_count's initialization under sess_run_count_lock
   sess_run_count = -1;
 
-  // cost_model_generated = new bool;
-  // *cost_model_generated = false;
+  cost_model_generated = new bool;
+  *cost_model_generated = false;
 
-  // TLS_cost_model = new std::unordered_map<string, int>;
+  TLS_cost_model = new std::unordered_map<string, int>;
   // Yitao-TLS-End
 
   if (options_.config.session_inter_op_thread_pool_size() > 0) {
@@ -836,6 +836,9 @@ Status DirectSession::Run(const RunOptions& run_options,
 
   args.sess_run_id = sess_run_id;
 
+  args.cost_model_generated = cost_model_generated;
+  args.TLS_cost_model = TLS_cost_model;
+
   LOG(INFO) << "[Yitao] There are " << num_executors << " Executors in executors_and_keys...";
   // Yitao-TLS-End
 
@@ -922,6 +925,15 @@ Status DirectSession::Run(const RunOptions& run_options,
     // }
     // // Yitao-TLS-End
 
+    // Yitao-TLS-Begin
+    for (int i = 0; i < cost_graph->node_size(); i++) {
+      const auto& myNode = cost_graph->node(i);
+      if (myNode.compute_cost() >= 200) {
+        TLS_cost_model->emplace(myNode.name(), myNode.compute_cost());
+      }
+    }
+    *cost_model_generated = true;
+    // Yitao-TLS-End
   }
 
   // If requested via RunOptions, output the partition graphs.
