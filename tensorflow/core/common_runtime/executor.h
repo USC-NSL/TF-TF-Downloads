@@ -33,6 +33,31 @@ limitations under the License.
 
 namespace tensorflow {
 
+// Yitao-TLS-Begin
+// a simple class to store the Session Id and Sess.run() Id
+class sessRunInfo {
+public:
+  // For job level scheduling, ttSessRunId is set 0.
+  sessRunInfo(int ttSessId, int ttSessRunId = 0) {
+    mySessId = ttSessId;
+    mySessRunId = ttSessRunId;
+  }
+
+  int mySessId;
+  int mySessRunId;
+
+  // overload < operation to make sure that for (mySessId, mySessRunId)
+  // (0, *) < (1, *) < (2, *) < (3, *)
+  // (*, 0) > (*, 1) > (*, 2) > (*, 3)
+  bool operator< (const sessRunInfo& rhs) const {
+    if (mySessId != rhs.mySessId)
+      return mySessId < rhs.mySessId;
+    else
+      return mySessRunId > rhs.mySessRunId; // *** pay attention to this > ***
+  }
+};
+// Yitao-TLS-End
+
 class StepStatsCollector;
 
 // Executor runs a graph computation.
@@ -111,11 +136,19 @@ class Executor {
 
     // Yitao-TLS-Begin
     int sess_id;
-    std::mutex* sched_lock;
+
+    int* next_sess_id;
+    int* next_sess_run_id;
+
+    bool* notify_done;
+
+    std::mutex* sched_lock; // shared by both TLS_cv and sched_cv
+    std::condition_variable* TLS_cv;
     std::condition_variable* sched_cv;
-    int* next_run_id;
-    bool* someone_running;
-    std::priority_queue<int, std::vector<int>, std::greater<int>>* wait_queue;
+
+    std::priority_queue<sessRunInfo>* TLS_queue;
+
+    int sess_run_id;
     // Yitao-TLS-End
 
   };

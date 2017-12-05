@@ -112,19 +112,34 @@ void StepStatsCollector::BuildCostModel(
     if (gpu_id >= 0) {
       // These are gpu hardware stats
       gpu_hardware_stats.emplace(gpu_id, &device_stats);
+
+      LOG(INFO) << "[Yitao] for device_name = " << device_name << ", it is the fake GPU device with stream index " << gpu_id;
+
     } else {
       // These are regular stats.
       per_device_stats.emplace(device_name,
                                DeviceStats{&device_stats, nullptr});
+
+      LOG(INFO) << "[Yitao] for device_name = " << device_name << ", it is not the fake GPU device";
+
     }
   }
 
   for (auto& itr : per_device_stats) {
     const StringPiece device_name = itr.first;
     const int gpu_id = ExtractGpuWithoutStream(device_name.ToString());
+
+    LOG(INFO) << "[Yitao] [tmp] for device_name = " << device_name << ", it's gpu_id = " << gpu_id;
+
     if (gpu_id >= 0) {
       // Reference the gpu hardware stats in addition to the regular stats
       // for this gpu device if they're available.
+      // Yitao: Because according to the above comments, they use the fake device's stats whenever they are available
+      //        for node execution information. But they still use regular stats for memory usage.
+      //        (Btw, fake device is the hardware/GPU info collector.)
+
+      LOG(INFO) << "[Yitao] *new* for device_name = " << device_name << ", it is a GPU device with stream index " << gpu_id;
+
       if (gpu_hardware_stats.find(gpu_id) != gpu_hardware_stats.end()) {
         itr.second.hardware_stats = gpu_hardware_stats.find(gpu_id)->second;
       }
@@ -157,6 +172,9 @@ void StepStatsCollector::BuildCostModel(
         if (pos != std::string::npos) {
           node_name = node_name.substr(0, pos);
         }
+
+        // LOG(INFO) << "[Yitao] node " << node_name << "'s time = " << node_stats.op_end_rel_micros();
+
         // Certain ops (e.g. Conv2D) are implemented with multiple GPU kernels,
         // which results in multiple NodeExecStats with the same node name. For
         // such ops, we sum up the time for all its GPU kernels.
@@ -196,9 +214,14 @@ void StepStatsCollector::BuildCostModel(
           const NodeExecStats& hw_stats = name_to_hw_node_stats[node_name];
           cm->RecordMaxExecutionTime(
               node, Microseconds(hw_stats.op_end_rel_micros()));
+
+          // LOG(INFO) << "[Yitao] GPUTracer gets cost for node " << node_name << " = " << hw_stats.op_end_rel_micros();
+
         } else {
           cm->RecordMaxExecutionTime(node,
                                      Microseconds(stats.op_end_rel_micros()));
+
+          // LOG(INFO) << "[Yitao] default tracer gets cost for node " << node_name << " = " << stats.op_end_rel_micros();
         }
       }
     }

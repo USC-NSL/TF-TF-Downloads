@@ -116,20 +116,24 @@ class DirectSession : public Session {
   // sess_id is used to distinguish between different Sessions.
   // Namely, each Session object will be assigned a dedicated sess_id
   int sess_id;
-  // sched_lock and sched_cv are used together to implement the TLS scheduler.
-  // Yitao-to-do: should we assign one conditional variable per Session object,
-  //              instead of using pointers to let Session objects to share the same cv?
-  std::mutex* sched_lock;
+
+  int* next_sess_id;
+  int* next_sess_run_id;
+
+  bool* notify_done;
+
+  std::mutex* sched_lock; // shared by both TLS_cv and sched_cv
+  std::condition_variable* TLS_cv;
   std::condition_variable* sched_cv;
-  // next_run_id serves as a token shared by all the Session objects and TLS scheduler
-  // Yitao-to-do: make sure next_run_id is thread_safe.
-  //              currently, I think it is thread_safe since its value will only be read or 
-  //              modified under the conditional variable. But need to further verify.
-  int* next_run_id;
-  bool* someone_running;
-  std::priority_queue<int, std::vector<int>, std::greater<int>>* wait_queue;
+
+  std::priority_queue<sessRunInfo>* TLS_queue;
+
   int sess_run_count;
   mutex sess_run_count_lock;
+
+  // bool* cost_model_generated;
+  // std::unordered_map<string, int>* TLS_cost_model; 
+
   // Yitao-TLS-End
 
   typedef DirectSession ME;
