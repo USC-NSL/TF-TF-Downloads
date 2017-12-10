@@ -1527,7 +1527,7 @@ struct ExecutorState::AsyncState {
 };
 
 // Yitao-TLS-Begin
-bool checkNodeHasHighCost(std::string node_name, std::unordered_map<string, int>* TLS_cost_model) {
+bool checkNodeHasHighCost(std::string node_name, std::unordered_map<string, int>* TLS_cost_model, int* cumulatedCost) {
   // std::string high_cost_node_name_set[] = {"Conv2D"};
   // // std::string high_cost_node_name_set[] = {"Conv2D", "batchnorm", "pool", "DecodeJpeg"};
   // // std::string high_cost_node_name_set[] = {"Conv2D", "batchnorm", "pool"};
@@ -1542,14 +1542,20 @@ bool checkNodeHasHighCost(std::string node_name, std::unordered_map<string, int>
 
   if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
     // LOG(INFO) << "[Yitao] Biubiubiu for node " << node_name << " with cost of " << (*TLS_cost_model)[node_name];
-    return true;
+    (*cumulatedCost) += (*TLS_cost_model)[node_name];
+    if ((*cumulatedCost) >= 200) {                              // <=== pay attention
+      LOG(INFO) << "[Yitao] Biubiubiu for node " << node_name << " with cost of " << (*TLS_cost_model)[node_name];
+      *cumulatedCost = 0;
+      return true;
+    } else {
+      return false;
+    }
   } else {
     return false;
   }
 
   // return false;
 }
-
 // Yitao-TLS-End
 
 void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
@@ -1596,6 +1602,13 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
   EntryVector outputs;
   bool completed = false;
   inline_ready.push_back(tagged_node);
+
+  // Yitao-TLS-Begin
+  int* cumulatedCost;
+  cumulatedCost = new int;
+  *cumulatedCost = 0;
+  // Yitao-TLS-End
+
   while (!inline_ready.empty()) {
 
 
@@ -1616,8 +1629,11 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     // Yitao-TLS-Begin
     // LOG(INFO) << "pop Node " << id << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs with device " << node->assigned_device_name();
 
+    bool tmpCheckNodeHasHighCost = false;
+
     if (*cost_model_generated) {
-      if (checkNodeHasHighCost(node->name(), TLS_cost_model)) { // <====== should_we_push_this_node(node) for node level scheduling here
+      tmpCheckNodeHasHighCost = checkNodeHasHighCost(node->name(), TLS_cost_model, cumulatedCost);
+      if (tmpCheckNodeHasHighCost) { // <====== should_we_push_this_node(node) for node level scheduling here
         {
           // since we are modifying the shared TLS_queue,
           // we need sched_lock to protect it.
@@ -1887,7 +1903,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
 
     // Yitao-TLS-Begin
     if (*cost_model_generated) {
-      if (checkNodeHasHighCost(node->name(), TLS_cost_model)) { // <====== should_we_push_this_node(node) for node level scheduling here
+      if (tmpCheckNodeHasHighCost) { // <====== should_we_push_this_node(node) for node level scheduling here
         TLS_cv->notify_all();
       }
     }

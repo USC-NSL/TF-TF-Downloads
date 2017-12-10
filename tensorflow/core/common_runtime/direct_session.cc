@@ -928,7 +928,7 @@ Status DirectSession::Run(const RunOptions& run_options,
     // Yitao-TLS-Begin
     for (int i = 0; i < cost_graph->node_size(); i++) {
       const auto& myNode = cost_graph->node(i);
-      if (myNode.compute_cost() >= 200) {
+      if (myNode.compute_cost() >= 0) {                                   // <=== pay attention
         TLS_cost_model->emplace(myNode.name(), myNode.compute_cost());
       }
     }
