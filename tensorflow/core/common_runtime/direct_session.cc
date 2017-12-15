@@ -434,6 +434,7 @@ DirectSession::DirectSession(const SessionOptions& options,
   *cost_model_generated = false;
 
   TLS_cost_model = new std::unordered_map<string, int>;
+
   // Yitao-TLS-End
 
   if (options_.config.session_inter_op_thread_pool_size() > 0) {
@@ -618,6 +619,10 @@ Status DirectSession::Run(const RunOptions& run_options,
     sess_run_id = sess_run_count;
   }
   LOG(INFO) << "[Yitao] ****** DirectSession::Run(), we have sess_run_id = " << sess_run_id;
+
+  int* cv_check_count;
+  cv_check_count = new int;
+  *cv_check_count = 0;
 
   // // Yitao-TLS-Begin
   // if (true) { // <====== should_we_push_this_node(node) for node level scheduling here
@@ -839,6 +844,8 @@ Status DirectSession::Run(const RunOptions& run_options,
   args.cost_model_generated = cost_model_generated;
   args.TLS_cost_model = TLS_cost_model;
 
+  args.cv_check_count = cv_check_count;
+
   LOG(INFO) << "[Yitao] There are " << num_executors << " Executors in executors_and_keys...";
   // Yitao-TLS-End
 
@@ -953,7 +960,8 @@ Status DirectSession::Run(const RunOptions& run_options,
   // }
   // // Yitao-TLS-End
 
-  LOG(INFO) << "[Yitao] Finished one DirectSession::Run()!";
+  // LOG(INFO) << "[Yitao] Finished one DirectSession::Run()!";
+  LOG(INFO) << "[Yitao] Finished one DirectSession::Run() with " << *cv_check_count << " cv checking!";
 
   return Status::OK();
 }

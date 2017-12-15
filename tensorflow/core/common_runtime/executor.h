@@ -152,6 +152,8 @@ class Executor {
 
     bool* cost_model_generated;
     std::unordered_map<string, int>* TLS_cost_model; 
+
+    int* cv_check_count;
     // Yitao-TLS-End
 
   };

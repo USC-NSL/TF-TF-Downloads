@@ -132,7 +132,7 @@ class DirectSession : public Session {
   mutex sess_run_count_lock;
 
   bool* cost_model_generated;
-  std::unordered_map<string, int>* TLS_cost_model; 
+  std::unordered_map<string, int>* TLS_cost_model;
 
   // Yitao-TLS-End
 
