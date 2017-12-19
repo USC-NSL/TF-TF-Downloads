@@ -1533,6 +1533,7 @@ struct ExecutorState::AsyncState {
 bool checkNodeHasHighCost(const Node* node, std::unordered_map<string, int>* TLS_cost_model, int* cumulatedCost, int sess_run_id, int process_id) {
   const std::string node_name = node->name();
   const int node_id = node->id();
+  const std::string node_device = node->assigned_device_name();
 
   // // Method I: using a pre-defined list
   // std::string high_cost_node_name_set[] = {"Conv2D"};
@@ -1549,23 +1550,53 @@ bool checkNodeHasHighCost(const Node* node, std::unordered_map<string, int>* TLS
   // }
   // return false;
 
-  // Method II: using cumulated cost to guarantee fairness
-  if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
-    (*cumulatedCost) += (*TLS_cost_model)[node_name];
-    if (process_id != 59) {                                     // all Conv2D nodes are in process 59
+  // // Method IIa: using cumulated cost to guarantee fairness
+  // if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
+  //   (*cumulatedCost) += (*TLS_cost_model)[node_name];
+  //   if (process_id != 59) {                                     // all Conv2D nodes are in process 59
+  //     return false;
+  //   } else {
+  //     if ((*cumulatedCost) >= 200) {                              // <=== pay attention
+  //       if (sess_run_id == 10) {
+  //           LOG(INFO) << "[Yitao] in process " << process_id << ", Biubiubiu for node " << node_id << " " << node_name << " with cost of " << (*TLS_cost_model)[node_name];
+  //       }
+  //       *cumulatedCost = 0;
+  //       return true;
+  //     } else {
+  //       return false;
+  //     }
+  //   }
+  // } else {
+  //   return false;
+  // }
+
+  // Method IIb: suggested by Ramesh
+  if (node_device.find("gpu") != std::string::npos) {
+    // if (process_id == 1) {    // <== Testing: exclude process 1...
+    //   return false;
+    // }
+
+    if (node->type_string().compare("VariableV2") == 0) {   // <== Testing: exclude nodeType VariableV2
       return false;
-    } else {
-      if ((*cumulatedCost) >= 200) {                              // <=== pay attention
+    }
+
+    // LOG(INFO) << "[Yitao] node " << node_name << " on device " << node->assigned_device_name() << " is GPU device...";
+    if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
+      (*cumulatedCost) += (*TLS_cost_model)[node_name];
+      if ((*cumulatedCost) >= 400) {
         if (sess_run_id == 10) {
-            LOG(INFO) << "[Yitao] in process " << process_id << ", Biubiubiu for node " << node_id << " " << node_name << " with cost of " << (*TLS_cost_model)[node_name];
+          LOG(INFO) << "[Yitao] in process " << process_id << ", Biubiubiu for node " << node_id << " " << node_name << " with cost of " << (*TLS_cost_model)[node_name] << " on device " << node_device;
         }
         *cumulatedCost = 0;
         return true;
       } else {
         return false;
       }
+    } else {
+      return false;
     }
   } else {
+    // LOG(INFO) << "[Yitao] node " << node_name << " on device " << node->assigned_device_name() << " is CPU device...";
     return false;
   }
 
@@ -1582,9 +1613,9 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     mutex_lock l(mu_);
     process_count += 1;
     process_id = process_count;
-    if (sess_run_id == 10) {
-      LOG(INFO) << "[Yitao] Now there are " << process_count << " Process() called with node " << tagged_node.node->id() << " " << tagged_node.node->type_string() << " " << tagged_node.node->name() << " with device " << tagged_node.node->assigned_device_name();
-    }
+    // if (sess_run_id == 10) {
+    //   LOG(INFO) << "[Yitao] Now there are " << process_count << " Process() called with node " << tagged_node.node->id() << " " << tagged_node.node->type_string() << " " << tagged_node.node->name() << " with device " << tagged_node.node->assigned_device_name();
+    // }
   }
   // Yitao-TLS-End
 
@@ -1650,11 +1681,16 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
 
 
     // Yitao-TLS-Begin
-    // LOG(INFO) << "pop Node " << id << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs with device " << node->assigned_device_name();
+    // LOG(INFO) << "[Yitao] pop Node " << id << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs with device " << node->assigned_device_name() << " in process " << process_id;
 
     bool tmpCheckNodeHasHighCost = false;
 
     if (*cost_model_generated) {
+
+      // if (sess_run_id == 10 && process_id == 1) {
+      //   LOG(INFO) << "[Yitao] pop Node " << id << " " << node->type_string() << " " << node->name() << " with cost of " << (*TLS_cost_model)[node->name()] << " on device " << node->assigned_device_name() << " in process " << process_id;
+      // }
+
       
       tmpCheckNodeHasHighCost = checkNodeHasHighCost(node, TLS_cost_model, cumulatedCost, sess_run_id, process_id);
 
