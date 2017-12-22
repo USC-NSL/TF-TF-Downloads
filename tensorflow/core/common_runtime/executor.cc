@@ -1583,7 +1583,7 @@ bool checkNodeHasHighCost(const Node* node, std::unordered_map<string, int>* TLS
     // LOG(INFO) << "[Yitao] node " << node_name << " on device " << node->assigned_device_name() << " is GPU device...";
     if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
       (*cumulatedCost) += (*TLS_cost_model)[node_name];
-      if ((*cumulatedCost) >= 400) {
+      if ((*cumulatedCost) >= 200) {
         if (sess_run_id == 10) {
           LOG(INFO) << "[Yitao] in process " << process_id << ", Biubiubiu for node " << node_id << " " << node_name << " with cost of " << (*TLS_cost_model)[node_name] << " on device " << node_device;
         }
