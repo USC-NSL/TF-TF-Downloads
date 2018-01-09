@@ -639,7 +639,7 @@ Status DirectSession::Run(const RunOptions& run_options,
   *my_cumulated_cost = 0;
 
   {
-    std::unique_lock<std::mutex> lk(*sched_lock);
+    // std::unique_lock<std::mutex> lk(*sched_lock);
     olympia_scheduler->SessRunRegister(sr_info, my_cv, my_cumulated_cost);
   }
   // Yitao-TLS-End
@@ -984,13 +984,13 @@ Status DirectSession::Run(const RunOptions& run_options,
 
   // Yitao-TLS-Begin
   {
-    std::unique_lock<std::mutex> lk(*sched_lock);
+    // std::unique_lock<std::mutex> lk(*sched_lock);
     olympia_scheduler->SessRunDeregister(sr_info);
   }
   // Yitao-TLS-End
 
   // LOG(INFO) << "[Yitao] Finished one DirectSession::Run()!";
-  LOG(INFO) << "[Yitao] Finished one DirectSession::Run() with " << *cv_check_count << " cv checking!";
+  LOG(INFO) << "[Yitao] Finished one DirectSession::Run(" << sr_info.sess_id << ", " << sr_info.run_id << ") with " << *cv_check_count << " cv checking!";
 
   return Status::OK();
 }

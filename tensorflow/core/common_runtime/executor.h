@@ -48,11 +48,15 @@ public:
     return (sess_id == other.sess_id && run_id == other.run_id);
   }
 
+  bool operator!=(const SessRunInfo &other) const {
+    return (sess_id != other.sess_id || run_id != other.run_id);
+  }
+
   bool operator< (const SessRunInfo &other) const {
     if (sess_id != other.sess_id)
       return sess_id < other.sess_id;
     else
-      return run_id > other.run_id;
+      return run_id < other.run_id;
   }
 
   // friend ostream& operator<< (ostream& os, const SessRunInfo& sr_info);
@@ -97,6 +101,7 @@ public:
   }
 
   void SessRunRegister(SessRunInfo sr_info, std::condition_variable* my_cv, int* my_cumulated_cost) {
+    std::unique_lock<std::mutex> lk(*sched_lock);
     sr_queue.push(sr_info);
     cv_map[sr_info] = my_cv;
     cumulate_cost_map[sr_info] = my_cumulated_cost;
@@ -105,26 +110,39 @@ public:
 
     // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
     cur_sr_info = sr_queue.top();
-    cv_map[cur_sr_info]->notify_all();
+    // LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
+    std::condition_variable* cur_cv = cv_map[cur_sr_info];
+    lk.unlock();
+    cur_cv->notify_all();
   }
 
   void SessRunDeregister(SessRunInfo sr_info) {
+    std::unique_lock<std::mutex> lk(*sched_lock);
     sr_queue.remove(sr_info);
 
     // LOG(INFO) << "[Yitao] after deregister (" << sr_info.sess_id << ", " << sr_info.run_id << "), sr_queue.size() = " << sr_queue.size();
 
     // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
     cur_sr_info = sr_queue.top();
-    cv_map[cur_sr_info]->notify_all();
+    // LOG(INFO) << "[Yitao] in SessRunDeregister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
+    std::condition_variable* cur_cv = cv_map[cur_sr_info];
+    lk.unlock();
+    cur_cv->notify_all();
   }
 
   void SessRunYield(SessRunInfo sr_info) {
+    std::unique_lock<std::mutex> lk(*sched_lock);
     // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
     cur_sr_info = sr_queue.top();
 
-    // LOG(INFO) << "[Yitao] (" << sr_info.sess_id << ", " << sr_info.run_id << ") yielded to (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
-    
-    cv_map[cur_sr_info]->notify_all();
+    // if (cur_sr_info != sr_info) {
+    //   LOG(INFO) << "[Yitao] (" << sr_info.sess_id << ", " << sr_info.run_id << ") yielded to (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
+    // }
+    // LOG(INFO) << "[Yitao] in SessRunYield(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
+
+    std::condition_variable* cur_cv = cv_map[cur_sr_info];
+    lk.unlock();
+    cur_cv->notify_all();
   }
 
   std::mutex* GetSchedLock() {

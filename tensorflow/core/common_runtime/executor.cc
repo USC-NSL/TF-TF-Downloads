@@ -1750,6 +1750,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     // // Yitao-TLS-End
 
     // // Yitao-TLS-Begin
+    // bool shouldYield = false;
     // bool thisIsGpuNode = node->assigned_device_name().find("gpu") != std::string::npos;
     // if (*cost_model_generated) {
     //   if (thisIsGpuNode) {
@@ -1759,8 +1760,11 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     //       *my_cumulated_cost += (*TLS_cost_model)[node_name];
     //       if ((*my_cumulated_cost) >= 200) {
     //         *my_cumulated_cost = 0;
-    //         olympia_scheduler->SessRunYield(sr_info);
+    //         shouldYield = true;
     //       }
+    //     }
+    //     if (shouldYield) {
+    //       olympia_scheduler->SessRunYield(sr_info);
     //     }
     //   }
     // }
@@ -1768,7 +1772,15 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     //   if (thisIsGpuNode) {
     //     std::unique_lock<std::mutex> lk(*sched_lock);
     //     *cv_check_count += 1;
-    //     my_cv->wait(lk, [sr_info, this](){return sr_info == this->olympia_scheduler->GetCurSessRunInfo();});
+    //     my_cv->wait(lk, [sr_info, this](){
+    //       // return sr_info == this->olympia_scheduler->GetCurSessRunInfo();
+    //       SessRunInfo token_info = this->olympia_scheduler->GetCurSessRunInfo();
+    //       bool tmp = (sr_info == token_info);
+    //       if (!tmp) {
+    //         LOG(INFO) << "[Yitao] sr_info = (" << sr_info.sess_id << ", " << sr_info.run_id << ") != token_info = (" << token_info.sess_id << ", " << token_info.run_id << ")";
+    //       }
+    //       return tmp;
+    //     });
     //   }
     // }
     // // Yitao-TLS-End
