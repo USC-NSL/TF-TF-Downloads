@@ -170,44 +170,45 @@ string GetRendezvousKey(const string& tensor_name,
 // }
 // // Yitao-TLS-End
 
-// Yitao-TLS-Begin
-// The thread for TLS scheduler to serve as a centralized scheduler
-void TLS_scheduler(std::priority_queue<sessRunInfo>* TLS_queue, std::mutex* sched_lock, std::condition_variable* TLS_cv, std::condition_variable* sched_cv, int* next_sess_id, int* next_sess_run_id, bool* notify_done) {
-  while (true) {
-    std::unique_lock<std::mutex> lk(*sched_lock);
+// // Yitao-TLS-Begin
+// // The thread for TLS scheduler to serve as a centralized scheduler
+// void TLS_scheduler(std::priority_queue<sessRunInfo>* TLS_queue, std::mutex* sched_lock, std::condition_variable* TLS_cv, std::condition_variable* sched_cv, int* next_sess_id, int* next_sess_run_id, bool* notify_done) {
+//   while (true) {
+//     std::unique_lock<std::mutex> lk(*sched_lock);
 
-    // In Process(), each node will notify TLS_cv twice,
-    // and as long as TLS_queue is not empty, this thread will be awaken from suspending
-    TLS_cv->wait(lk, [TLS_queue](){return !TLS_queue->empty();});
+//     // In Process(), each node will notify TLS_cv twice,
+//     // and as long as TLS_queue is not empty, this thread will be awaken from suspending
+//     TLS_cv->wait(lk, [TLS_queue](){return !TLS_queue->empty();});
 
-    sessRunInfo mySessRunInfo = TLS_queue->top();
-    TLS_queue->pop();
+//     sessRunInfo mySessRunInfo = TLS_queue->top();
+//     TLS_queue->pop();
 
-    *next_sess_id = mySessRunInfo.mySessId;
-    *next_sess_run_id = mySessRunInfo.mySessRunId;
+//     *next_sess_id = mySessRunInfo.mySessId;
+//     *next_sess_run_id = mySessRunInfo.mySessRunId;
 
-    // LOG(INFO) << "[TLS scheduler] decided to run sess_id = " << *next_sess_id << ", sess_run_id = " << *next_sess_run_id << ", and after pop, TLS_queue->size() = " << TLS_queue->size();
+//     // LOG(INFO) << "[TLS scheduler] decided to run sess_id = " << *next_sess_id << ", sess_run_id = " << *next_sess_run_id << ", and after pop, TLS_queue->size() = " << TLS_queue->size();
 
-    // notify_done is used to ensure that this (next_sess_id, next_sess_run_id)
-    // can guarantee the corresponding Sess.run() will be awaken from suspending.
-    // notify_done is used to fix the previous threading bug!!!
-    *notify_done = false;
+//     // notify_done is used to ensure that this (next_sess_id, next_sess_run_id)
+//     // can guarantee the corresponding Sess.run() will be awaken from suspending.
+//     // notify_done is used to fix the previous threading bug!!!
+//     *notify_done = false;
 
-    while (!*notify_done) {
-      lk.unlock(); // need to unlock lk, otherwise will lead to contension
-      sched_cv->notify_all();
-      lk.lock();
-    }
-  }
-}
-// Yitao-TLS-End
+//     while (!*notify_done) {
+//       lk.unlock(); // need to unlock lk, otherwise will lead to contension
+//       sched_cv->notify_all();
+//       lk.lock();
+//     }
+//   }
+// }
+// // Yitao-TLS-End
 
 class DirectSessionFactory : public SessionFactory {
  public:
   DirectSessionFactory() {}
 
   // Yitao-TLS-Begin
-  ~DirectSessionFactory() {my_thread->join();}
+  // ~DirectSessionFactory() {my_thread->join();}
+  ~DirectSessionFactory() {}
   // Yitao-TLS-End
 
   bool AcceptsOptions(const SessionOptions& options) override {
@@ -224,21 +225,23 @@ class DirectSessionFactory : public SessionFactory {
         LOG(INFO) << "[Yitao] Testing: DirectSessionFactory::DirectSessionFactory(), we are calling initialization function of DirectSessionFactory @@@@@@";
         sess_count = -1;
 
-        next_sess_id = new int;
-        next_sess_run_id = new int;
-        *next_sess_id = -1;
-        *next_sess_run_id = -1;
+        // next_sess_id = new int;
+        // next_sess_run_id = new int;
+        // *next_sess_id = -1;
+        // *next_sess_run_id = -1;
 
-        notify_done = new bool;
-        *notify_done = false;
+        // notify_done = new bool;
+        // *notify_done = false;
 
-        sched_lock = new std::mutex;
-        TLS_cv = new std::condition_variable;
-        sched_cv = new std::condition_variable;
+        // sched_lock = new std::mutex;
+        // TLS_cv = new std::condition_variable;
+        // sched_cv = new std::condition_variable;
 
-        TLS_queue = new std::priority_queue<sessRunInfo>;
+        // TLS_queue = new std::priority_queue<sessRunInfo>;
 
-        my_thread = new std::thread(TLS_scheduler, TLS_queue, sched_lock, TLS_cv, sched_cv, next_sess_id, next_sess_run_id, notify_done);
+        // my_thread = new std::thread(TLS_scheduler, TLS_queue, sched_lock, TLS_cv, sched_cv, next_sess_id, next_sess_run_id, notify_done);
+      
+        olympia_scheduler = new OlympiaScheduler;
       }
     }
     // Yitao-TLS-End
@@ -326,18 +329,20 @@ class DirectSessionFactory : public SessionFactory {
     return sess_count;
   }
 
-  int* next_sess_id;
-  int* next_sess_run_id;
+  // int* next_sess_id;
+  // int* next_sess_run_id;
 
-  bool* notify_done;
+  // bool* notify_done;
 
-  std::mutex* sched_lock; // shared by both TLS_cv and sched_cv
-  std::condition_variable* TLS_cv;
-  std::condition_variable* sched_cv;
+  // std::mutex* sched_lock; // shared by both TLS_cv and sched_cv
+  // std::condition_variable* TLS_cv;
+  // std::condition_variable* sched_cv;
 
-  std::priority_queue<sessRunInfo>* TLS_queue;
+  // std::priority_queue<sessRunInfo>* TLS_queue;
 
-  std::thread* my_thread;
+  // std::thread* my_thread;
+
+  OlympiaScheduler* olympia_scheduler;
 
   static bool first_constructor_called;
   // Yitao-TLS-End
@@ -416,16 +421,16 @@ DirectSession::DirectSession(const SessionOptions& options,
   sess_id = sess_count;
   LOG(INFO) << "[Yitao] ****** DirectSession::DirectSession(), we have sess_id = " << sess_id;
 
-  next_sess_id = factory_->next_sess_id;
-  next_sess_run_id = factory_->next_sess_run_id;
+  // next_sess_id = factory_->next_sess_id;
+  // next_sess_run_id = factory_->next_sess_run_id;
 
-  notify_done = factory_->notify_done;
+  // notify_done = factory_->notify_done;
 
-  sched_lock = factory_->sched_lock;
-  TLS_cv = factory_->TLS_cv;
-  sched_cv = factory_->sched_cv;
+  // sched_lock = factory_->sched_lock;
+  // TLS_cv = factory_->TLS_cv;
+  // sched_cv = factory_->sched_cv;
 
-  TLS_queue = factory_->TLS_queue;
+  // TLS_queue = factory_->TLS_queue;
 
   // might consider put sess_run_count's initialization under sess_run_count_lock
   sess_run_count = -1;
@@ -434,6 +439,8 @@ DirectSession::DirectSession(const SessionOptions& options,
   *cost_model_generated = false;
 
   TLS_cost_model = new std::unordered_map<string, int>;
+
+  olympia_scheduler = factory_->olympia_scheduler;
 
   // Yitao-TLS-End
 
@@ -623,6 +630,19 @@ Status DirectSession::Run(const RunOptions& run_options,
   int* cv_check_count;
   cv_check_count = new int;
   *cv_check_count = 0;
+
+  // Yitao-TLS-Begin
+  SessRunInfo sr_info = SessRunInfo(sess_id, sess_run_id);
+  std::mutex* sched_lock = olympia_scheduler->GetSchedLock();
+  std::condition_variable* my_cv = new std::condition_variable;
+  int* my_cumulated_cost = new int;
+  *my_cumulated_cost = 0;
+
+  {
+    std::unique_lock<std::mutex> lk(*sched_lock);
+    olympia_scheduler->SessRunRegister(sr_info, my_cv, my_cumulated_cost);
+  }
+  // Yitao-TLS-End
 
   // // Yitao-TLS-Begin
   // if (true) { // <====== should_we_push_this_node(node) for node level scheduling here
@@ -828,21 +848,23 @@ Status DirectSession::Run(const RunOptions& run_options,
   // Yitao-TLS-Begin
   args.sess_id = sess_id;
 
-  args.next_sess_id = next_sess_id;
-  args.next_sess_run_id = next_sess_run_id;
+  // args.next_sess_id = next_sess_id;
+  // args.next_sess_run_id = next_sess_run_id;
 
-  args.notify_done = notify_done;
+  // args.notify_done = notify_done;
 
-  args.sched_lock = sched_lock;
-  args.TLS_cv = TLS_cv;
-  args.sched_cv = sched_cv;
+  // args.sched_lock = sched_lock;
+  // args.TLS_cv = TLS_cv;
+  // args.sched_cv = sched_cv;
 
-  args.TLS_queue = TLS_queue;
+  // args.TLS_queue = TLS_queue;
 
   args.sess_run_id = sess_run_id;
 
   args.cost_model_generated = cost_model_generated;
   args.TLS_cost_model = TLS_cost_model;
+
+  args.olympia_scheduler = olympia_scheduler;
 
   args.cv_check_count = cv_check_count;
 
@@ -959,6 +981,13 @@ Status DirectSession::Run(const RunOptions& run_options,
   //   TLS_cv->notify_all();
   // }
   // // Yitao-TLS-End
+
+  // Yitao-TLS-Begin
+  {
+    std::unique_lock<std::mutex> lk(*sched_lock);
+    olympia_scheduler->SessRunDeregister(sr_info);
+  }
+  // Yitao-TLS-End
 
   // LOG(INFO) << "[Yitao] Finished one DirectSession::Run()!";
   LOG(INFO) << "[Yitao] Finished one DirectSession::Run() with " << *cv_check_count << " cv checking!";

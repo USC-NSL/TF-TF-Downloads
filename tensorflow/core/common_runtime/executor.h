@@ -29,34 +29,129 @@ limitations under the License.
 // Yitao-TLS-Begin
 #include <thread>
 #include <queue>
+// a simple class to store the Session Id and Sess.run() Id
+class SessRunInfo {
+public:
+  SessRunInfo() {
+    sess_id = -1;
+    run_id = -1;
+  }
+  SessRunInfo(int tt_sess_id, int tt_run_id) {
+    sess_id = tt_sess_id;
+    run_id = tt_run_id;
+  }
+
+  int sess_id;
+  int run_id;
+
+  bool operator==(const SessRunInfo &other) const {
+    return (sess_id == other.sess_id && run_id == other.run_id);
+  }
+
+  bool operator< (const SessRunInfo &other) const {
+    if (sess_id != other.sess_id)
+      return sess_id < other.sess_id;
+    else
+      return run_id > other.run_id;
+  }
+
+  // friend ostream& operator<< (ostream& os, const SessRunInfo& sr_info);
+};
+
+// ostream& operator<< (ostream& os, const SessRunInfo& sr_info) {
+//   os << "(" << sr_info.sess_id << ", " << sr_info.run_id << ")";
+//   return os;
+// }
+
+namespace std {
+  template <>
+  struct hash<SessRunInfo> {
+    size_t operator()(const SessRunInfo& sr_info) const {
+      return ((hash<int>()(sr_info.sess_id) ^ (hash<int>()(sr_info.run_id) << 1)) >> 1);
+    }
+  };
+}
+
+template<typename T>
+class CustomPriorityQueue : public std::priority_queue<T, std::vector<T>> {
+public:
+  bool remove(const T& value) {
+    auto it = std::find(this->c.begin(), this->c.end(), value);
+    if (it != this->c.end()) {
+      this->c.erase(it);
+      std::make_heap(this->c.begin(), this->c.end(), this->comp);
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
+class OlympiaScheduler{
+public:
+  OlympiaScheduler() {
+    // cout << "OlympiaScheduler initialized..." << endl;
+    sched_lock = new std::mutex;
+    cur_sr_info = SessRunInfo(-1, -1);
+    // notify_done = new bool;
+  }
+
+  void SessRunRegister(SessRunInfo sr_info, std::condition_variable* my_cv, int* my_cumulated_cost) {
+    sr_queue.push(sr_info);
+    cv_map[sr_info] = my_cv;
+    cumulate_cost_map[sr_info] = my_cumulated_cost;
+
+    // LOG(INFO) << "[Yitao] after register (" << sr_info.sess_id << ", " << sr_info.run_id << "), sr_queue.size() = " << sr_queue.size();
+
+    // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
+    cur_sr_info = sr_queue.top();
+    cv_map[cur_sr_info]->notify_all();
+  }
+
+  void SessRunDeregister(SessRunInfo sr_info) {
+    sr_queue.remove(sr_info);
+
+    // LOG(INFO) << "[Yitao] after deregister (" << sr_info.sess_id << ", " << sr_info.run_id << "), sr_queue.size() = " << sr_queue.size();
+
+    // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
+    cur_sr_info = sr_queue.top();
+    cv_map[cur_sr_info]->notify_all();
+  }
+
+  void SessRunYield(SessRunInfo sr_info) {
+    // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
+    cur_sr_info = sr_queue.top();
+
+    // LOG(INFO) << "[Yitao] (" << sr_info.sess_id << ", " << sr_info.run_id << ") yielded to (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
+    
+    cv_map[cur_sr_info]->notify_all();
+  }
+
+  std::mutex* GetSchedLock() {
+    return sched_lock;
+  }
+
+  SessRunInfo GetCurSessRunInfo() {
+    return cur_sr_info;
+  }
+
+  std::unordered_map<SessRunInfo, std::condition_variable*> cv_map;
+  std::unordered_map<SessRunInfo, int*> cumulate_cost_map;
+
+private:
+  std::mutex* sched_lock; // shared by all sessRuns' cv
+  SessRunInfo cur_sr_info;
+  // bool* notify_done;
+
+  CustomPriorityQueue<SessRunInfo> sr_queue;
+
+
+};
 // Yitao-TLS-End
 
 namespace tensorflow {
 
-// Yitao-TLS-Begin
-// a simple class to store the Session Id and Sess.run() Id
-class sessRunInfo {
-public:
-  // For job level scheduling, ttSessRunId is set 0.
-  sessRunInfo(int ttSessId, int ttSessRunId = 0) {
-    mySessId = ttSessId;
-    mySessRunId = ttSessRunId;
-  }
 
-  int mySessId;
-  int mySessRunId;
-
-  // overload < operation to make sure that for (mySessId, mySessRunId)
-  // (0, *) < (1, *) < (2, *) < (3, *)
-  // (*, 0) > (*, 1) > (*, 2) > (*, 3)
-  bool operator< (const sessRunInfo& rhs) const {
-    if (mySessId != rhs.mySessId)
-      return mySessId < rhs.mySessId;
-    else
-      return mySessRunId > rhs.mySessRunId; // *** pay attention to this > ***
-  }
-};
-// Yitao-TLS-End
 
 class StepStatsCollector;
 
@@ -137,21 +232,23 @@ class Executor {
     // Yitao-TLS-Begin
     int sess_id;
 
-    int* next_sess_id;
-    int* next_sess_run_id;
+    // int* next_sess_id;
+    // int* next_sess_run_id;
 
-    bool* notify_done;
+    // bool* notify_done;
 
-    std::mutex* sched_lock; // shared by both TLS_cv and sched_cv
-    std::condition_variable* TLS_cv;
-    std::condition_variable* sched_cv;
+    // std::mutex* sched_lock; // shared by both TLS_cv and sched_cv
+    // std::condition_variable* TLS_cv;
+    // std::condition_variable* sched_cv;
 
-    std::priority_queue<sessRunInfo>* TLS_queue;
+    // std::priority_queue<sessRunInfo>* TLS_queue;
 
     int sess_run_id;
 
     bool* cost_model_generated;
     std::unordered_map<string, int>* TLS_cost_model; 
+
+    OlympiaScheduler* olympia_scheduler;
 
     int* cv_check_count;
     // Yitao-TLS-End

@@ -117,22 +117,24 @@ class DirectSession : public Session {
   // Namely, each Session object will be assigned a dedicated sess_id
   int sess_id;
 
-  int* next_sess_id;
-  int* next_sess_run_id;
+  // int* next_sess_id;
+  // int* next_sess_run_id;
 
-  bool* notify_done;
+  // bool* notify_done;
 
-  std::mutex* sched_lock; // shared by both TLS_cv and sched_cv
-  std::condition_variable* TLS_cv;
-  std::condition_variable* sched_cv;
+  // std::mutex* sched_lock; // shared by both TLS_cv and sched_cv
+  // std::condition_variable* TLS_cv;
+  // std::condition_variable* sched_cv;
 
-  std::priority_queue<sessRunInfo>* TLS_queue;
+  // std::priority_queue<sessRunInfo>* TLS_queue;
 
   int sess_run_count;
   mutex sess_run_count_lock;
 
   bool* cost_model_generated;
   std::unordered_map<string, int>* TLS_cost_model;
+  
+  OlympiaScheduler* olympia_scheduler;
 
   // Yitao-TLS-End
 

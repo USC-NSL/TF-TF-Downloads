@@ -47,7 +47,6 @@ py_library(
         "//tensorflow/contrib/losses:losses_py",
         "//tensorflow/contrib/memory_stats:memory_stats_py",
         "//tensorflow/contrib/metrics:metrics_py",
-        "//tensorflow/contrib/nccl:nccl_py",
         "//tensorflow/contrib/ndlstm",
         "//tensorflow/contrib/nn:nn_py",
         "//tensorflow/contrib/opt:opt_py",
@@ -82,7 +81,6 @@ cc_library(
         "//tensorflow/contrib/framework:load_and_remap_matrix_kernel",
         "//tensorflow/contrib/input_pipeline:input_pipeline_ops_kernels",
         "//tensorflow/contrib/layers:sparse_feature_cross_op_kernel",
-        "//tensorflow/contrib/nccl:nccl_kernels",
         "//tensorflow/contrib/tensor_forest:tensor_forest_kernels",
     ],
 )
@@ -96,7 +94,6 @@ cc_library(
         "//tensorflow/contrib/framework:all_ops",
         "//tensorflow/contrib/input_pipeline:input_pipeline_ops_op_lib",
         "//tensorflow/contrib/layers:sparse_feature_cross_op_op_lib",
-        "//tensorflow/contrib/nccl:nccl_ops_op_lib",
         "//tensorflow/contrib/tensor_forest:tensor_forest_ops_op_lib",
     ],
 )

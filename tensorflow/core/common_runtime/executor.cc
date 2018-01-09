@@ -1202,21 +1202,23 @@ class ExecutorState {
   // Yitao-TLS-Begin
   int sess_id;
 
-  int* next_sess_id;
-  int* next_sess_run_id;
+  // int* next_sess_id;
+  // int* next_sess_run_id;
 
-  bool* notify_done;
+  // bool* notify_done;
 
-  std::mutex* sched_lock; // shared by both TLS_cv and sched_cv
-  std::condition_variable* TLS_cv;
-  std::condition_variable* sched_cv;
+  // std::mutex* sched_lock; // shared by both TLS_cv and sched_cv
+  // std::condition_variable* TLS_cv;
+  // std::condition_variable* sched_cv;
 
-  std::priority_queue<sessRunInfo>* TLS_queue;
+  // std::priority_queue<sessRunInfo>* TLS_queue;
 
   int sess_run_id;
 
   bool* cost_model_generated;
   std::unordered_map<string, int>* TLS_cost_model; 
+
+  OlympiaScheduler* olympia_scheduler;
 
   int* cv_check_count;
 
@@ -1330,16 +1332,17 @@ ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
       runner_(args.runner),
       sync_on_finish_(args.sync_on_finish),
       sess_id(args.sess_id),                            // Yitao-TLS-Begin
-      next_sess_id(args.next_sess_id),                  // Yitao-TLS-Begin
-      next_sess_run_id(args.next_sess_run_id),          // Yitao-TLS-Begin
-      notify_done(args.notify_done),                    // Yitao-TLS-Begin
-      sched_lock(args.sched_lock),                      // Yitao-TLS-Begin
-      TLS_cv(args.TLS_cv),                              // Yitao-TLS-Begin
-      sched_cv(args.sched_cv),                          // Yitao-TLS-Begin
-      TLS_queue(args.TLS_queue),                        // Yitao-TLS-Begin
+      // next_sess_id(args.next_sess_id),                  // Yitao-TLS-Begin
+      // next_sess_run_id(args.next_sess_run_id),          // Yitao-TLS-Begin
+      // notify_done(args.notify_done),                    // Yitao-TLS-Begin
+      // sched_lock(args.sched_lock),                      // Yitao-TLS-Begin
+      // TLS_cv(args.TLS_cv),                              // Yitao-TLS-Begin
+      // sched_cv(args.sched_cv),                          // Yitao-TLS-Begin
+      // TLS_queue(args.TLS_queue),                        // Yitao-TLS-Begin
       sess_run_id(args.sess_run_id),                    // Yitao-TLS-Begin
       cost_model_generated(args.cost_model_generated),  // Yitao-TLS-Begin
       TLS_cost_model(args.TLS_cost_model),              // Yitao-TLS-Begin
+      olympia_scheduler(args.olympia_scheduler),        // Yitao-TLS-Begin
       cv_check_count(args.cv_check_count),              // Yitao-TLS-Begin
       process_count(0),               // Yitao-TLS-Begin
       num_outstanding_ops_(0) {
@@ -1529,81 +1532,81 @@ struct ExecutorState::AsyncState {
   }
 };
 
-// Yitao-TLS-Begin
-bool checkNodeHasHighCost(const Node* node, std::unordered_map<string, int>* TLS_cost_model, int* cumulatedCost, int sess_run_id, int process_id) {
-  const std::string node_name = node->name();
-  const int node_id = node->id();
-  const std::string node_device = node->assigned_device_name();
+// // Yitao-TLS-Begin
+// bool checkNodeHasHighCost(const Node* node, std::unordered_map<string, int>* TLS_cost_model, int* cumulatedCost, int sess_run_id, int process_id) {
+//   const std::string node_name = node->name();
+//   const int node_id = node->id();
+//   const std::string node_device = node->assigned_device_name();
 
-  // // Method I: using a pre-defined list
-  // std::string high_cost_node_name_set[] = {"Conv2D"};
-  // // std::string high_cost_node_name_set[] = {"Conv2D", "map/while/Sub", "map/while/Mul"};
-  // // std::string high_cost_node_name_set[] = {"Conv2D", "batchnorm", "pool"};
-  // for (const std::string &hc_node : high_cost_node_name_set) {
-  //   // if (node_name.compare(hc_node) == 0)
-  //   if (node_name.find(hc_node) != std::string::npos) {
-  //     if (sess_run_id == 10) {
-  //       LOG(INFO) << "[Yitao] in process " << process_id << ", Biubiubiu for node " << node_id << " " << node_name << " with cost of " << (*TLS_cost_model)[node_name];
-  //     }
-  //     return true;
-  //   }
-  // }
-  // return false;
+//   // // Method I: using a pre-defined list
+//   // std::string high_cost_node_name_set[] = {"Conv2D"};
+//   // // std::string high_cost_node_name_set[] = {"Conv2D", "map/while/Sub", "map/while/Mul"};
+//   // // std::string high_cost_node_name_set[] = {"Conv2D", "batchnorm", "pool"};
+//   // for (const std::string &hc_node : high_cost_node_name_set) {
+//   //   // if (node_name.compare(hc_node) == 0)
+//   //   if (node_name.find(hc_node) != std::string::npos) {
+//   //     if (sess_run_id == 10) {
+//   //       LOG(INFO) << "[Yitao] in process " << process_id << ", Biubiubiu for node " << node_id << " " << node_name << " with cost of " << (*TLS_cost_model)[node_name];
+//   //     }
+//   //     return true;
+//   //   }
+//   // }
+//   // return false;
 
-  // // Method IIa: using cumulated cost to guarantee fairness
-  // if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
-  //   (*cumulatedCost) += (*TLS_cost_model)[node_name];
-  //   if (process_id != 59) {                                     // all Conv2D nodes are in process 59
-  //     return false;
-  //   } else {
-  //     if ((*cumulatedCost) >= 200) {                              // <=== pay attention
-  //       if (sess_run_id == 10) {
-  //           LOG(INFO) << "[Yitao] in process " << process_id << ", Biubiubiu for node " << node_id << " " << node_name << " with cost of " << (*TLS_cost_model)[node_name];
-  //       }
-  //       *cumulatedCost = 0;
-  //       return true;
-  //     } else {
-  //       return false;
-  //     }
-  //   }
-  // } else {
-  //   return false;
-  // }
+//   // // Method IIa: using cumulated cost to guarantee fairness
+//   // if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
+//   //   (*cumulatedCost) += (*TLS_cost_model)[node_name];
+//   //   if (process_id != 59) {                                     // all Conv2D nodes are in process 59
+//   //     return false;
+//   //   } else {
+//   //     if ((*cumulatedCost) >= 200) {                              // <=== pay attention
+//   //       if (sess_run_id == 10) {
+//   //           LOG(INFO) << "[Yitao] in process " << process_id << ", Biubiubiu for node " << node_id << " " << node_name << " with cost of " << (*TLS_cost_model)[node_name];
+//   //       }
+//   //       *cumulatedCost = 0;
+//   //       return true;
+//   //     } else {
+//   //       return false;
+//   //     }
+//   //   }
+//   // } else {
+//   //   return false;
+//   // }
 
-  // Method IIb: suggested by Ramesh
-  if (node_device.find("gpu") != std::string::npos) {
-    // if (process_id == 1) {    // <== Testing: exclude process 1...
-    //   return false;
-    // }
+//   // Method IIb: suggested by Ramesh
+//   if (node_device.find("gpu") != std::string::npos) {
+//     // if (process_id == 1) {    // <== Testing: exclude process 1...
+//     //   return false;
+//     // }
 
-    if (node->type_string().compare("VariableV2") == 0) {   // <== Testing: exclude nodeType VariableV2
-      return false;
-    }
+//     if (node->type_string().compare("VariableV2") == 0) {   // <== Testing: exclude nodeType VariableV2
+//       return false;
+//     }
 
-    // LOG(INFO) << "[Yitao] node " << node_name << " on device " << node->assigned_device_name() << " is GPU device...";
-    if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
-      (*cumulatedCost) += (*TLS_cost_model)[node_name];
-      if ((*cumulatedCost) >= 200) {
-        if (sess_run_id == 10) {
-          LOG(INFO) << "[Yitao] in process " << process_id << ", Biubiubiu for node " << node_id << " " << node_name << " with cost of " << (*TLS_cost_model)[node_name] << " on device " << node_device;
-        }
-        *cumulatedCost = 0;
-        return true;
-      } else {
-        return false;
-      }
-    } else {
-      return false;
-    }
-  } else {
-    // LOG(INFO) << "[Yitao] node " << node_name << " on device " << node->assigned_device_name() << " is CPU device...";
-    return false;
-  }
+//     // LOG(INFO) << "[Yitao] node " << node_name << " on device " << node->assigned_device_name() << " is GPU device...";
+//     if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
+//       (*cumulatedCost) += (*TLS_cost_model)[node_name];
+//       if ((*cumulatedCost) >= 200) {
+//         if (sess_run_id == 10) {
+//           LOG(INFO) << "[Yitao] in process " << process_id << ", Biubiubiu for node " << node_id << " " << node_name << " with cost of " << (*TLS_cost_model)[node_name] << " on device " << node_device;
+//         }
+//         *cumulatedCost = 0;
+//         return true;
+//       } else {
+//         return false;
+//       }
+//     } else {
+//       return false;
+//     }
+//   } else {
+//     // LOG(INFO) << "[Yitao] node " << node_name << " on device " << node->assigned_device_name() << " is CPU device...";
+//     return false;
+//   }
 
-  // // Method III: do nothing...
-  // return false;
-}
-// Yitao-TLS-End
+//   // // Method III: do nothing...
+//   // return false;
+// }
+// // Yitao-TLS-End
 
 void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
 
@@ -1617,6 +1620,10 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     //   LOG(INFO) << "[Yitao] Now there are " << process_count << " Process() called with node " << tagged_node.node->id() << " " << tagged_node.node->type_string() << " " << tagged_node.node->name() << " with device " << tagged_node.node->assigned_device_name();
     // }
   }
+  SessRunInfo sr_info = SessRunInfo(sess_id, sess_run_id);
+  std::mutex* sched_lock = olympia_scheduler->GetSchedLock();
+  std::condition_variable* my_cv = olympia_scheduler->cv_map[sr_info];
+  int* my_cumulated_cost = olympia_scheduler->cumulate_cost_map[sr_info];
   // Yitao-TLS-End
 
   const GraphView& gview = impl_->gview_;
@@ -1654,14 +1661,14 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
   bool completed = false;
   inline_ready.push_back(tagged_node);
 
-  // Yitao-TLS-Begin
-  int* cumulatedCost;
-  cumulatedCost = new int;
-  *cumulatedCost = 0;
+  // // Yitao-TLS-Begin
+  // int* cumulatedCost;
+  // cumulatedCost = new int;
+  // *cumulatedCost = 0;
 
-  // std::unordered_set<std::string> mySet = {"map/while/Merge_1", "inception_v3/mixed_17x17x768d/branch_pool/AvgPool/AvgPool", "inception_v3/conv0/Conv2D", "inception_v3/mixed_17x17x768a/branch3x3dbl/Conv_2/Conv2D", "inception_v3/mixed_17x17x768b/branch7x7/Conv_1/BatchNorm/batchnorm/add_1", "map/while/LoopCond", "inception_v3/mixed_35x35x256a/branch3x3dbl/Conv_1/BatchNorm/batchnorm/mul", "inception_v3/mixed_17x17x768c/branch_pool/Conv/BatchNorm/batchnorm/add/y", "map/while/ExpandDims/dim", "mixed_17x17x1280a/branch7x7x3/Conv_1/BatchNorm/moving_variance", "inception_v3/mixed_17x17x1280a/branch3x3/Conv_1/Conv2D", "map/while/div/y", "mixed_8x8x2048a/branch3x3dbl/Conv/weights/read", "inception_v3/mixed_17x17x768d/branch7x7/Conv_2/Conv2D", "inception_v3/mixed_8x8x2048b/branch3x3dbl/Conv_2/Relu", "inception_v3/mixed_8x8x2048a/concat", "map/while/NextIteration", "inception_v3/mixed_35x35x288a/branch3x3dbl/Conv_1/BatchNorm/batchnorm/sub", "mixed_35x35x288a/branch3x3dbl/Conv_1/BatchNorm/moving_variance", "inception_v3/mixed_8x8x2048b/branch3x3/Conv_2/Conv2D", "inception_v3/mixed_17x17x768d/branch7x7dbl/Conv_1/BatchNorm/batchnorm/sub", "inception_v3/mixed_17x17x768e/branch7x7dbl/Conv_2/Conv2D", "_cloopmap/while/convert_image/Cast/_791", "inception_v3/mixed_35x35x256a/branch_pool/AvgPool/AvgPool", "inception_v3/mixed_8x8x2048a/branch1x1/Conv/Conv2D", "map/while/DecodeJpeg", "inception_v3/mixed_8x8x2048a/branch3x3dbl/Conv_1/Conv2D", "inception_v3/mixed_35x35x288b/branch3x3dbl/Conv_2/Conv2D", "map/while/strided_slice_2/stack", "mixed_17x17x768e/branch7x7dbl/Conv_4/weights/read", "inception_v3/mixed_17x17x768c/branch7x7dbl/Conv_1/Relu", "inception_v3/mixed_17x17x768e/branch_pool/Conv/Conv2D", "inception_v3/mixed_35x35x288a/branch1x1/Conv/BatchNorm/batchnorm/add_1", "inception_v3/mixed_35x35x288b/branch1x1/Conv/Conv2D", "mixed_8x8x2048b/branch3x3dbl/Conv_3/BatchNorm/beta", "inception_v3/mixed_17x17x768b/concat", "map/while/Sub"};
-  // std::unordered_set<int> mySet = {1039, 29, 513, 755, 33, 1704, 1675, 1219, 473, 59, 42, 42, 59, 59, 42, 61, 42, 42, 129, 197, 268, 335, 441, 488, 600, 671, 770, 844, 943, 1017, 1115, 1190, 1289, 1380, 1451, 1521, 1590, 1645, 1729};
-  // Yitao-TLS-End
+  // // std::unordered_set<std::string> mySet = {"map/while/Merge_1", "inception_v3/mixed_17x17x768d/branch_pool/AvgPool/AvgPool", "inception_v3/conv0/Conv2D", "inception_v3/mixed_17x17x768a/branch3x3dbl/Conv_2/Conv2D", "inception_v3/mixed_17x17x768b/branch7x7/Conv_1/BatchNorm/batchnorm/add_1", "map/while/LoopCond", "inception_v3/mixed_35x35x256a/branch3x3dbl/Conv_1/BatchNorm/batchnorm/mul", "inception_v3/mixed_17x17x768c/branch_pool/Conv/BatchNorm/batchnorm/add/y", "map/while/ExpandDims/dim", "mixed_17x17x1280a/branch7x7x3/Conv_1/BatchNorm/moving_variance", "inception_v3/mixed_17x17x1280a/branch3x3/Conv_1/Conv2D", "map/while/div/y", "mixed_8x8x2048a/branch3x3dbl/Conv/weights/read", "inception_v3/mixed_17x17x768d/branch7x7/Conv_2/Conv2D", "inception_v3/mixed_8x8x2048b/branch3x3dbl/Conv_2/Relu", "inception_v3/mixed_8x8x2048a/concat", "map/while/NextIteration", "inception_v3/mixed_35x35x288a/branch3x3dbl/Conv_1/BatchNorm/batchnorm/sub", "mixed_35x35x288a/branch3x3dbl/Conv_1/BatchNorm/moving_variance", "inception_v3/mixed_8x8x2048b/branch3x3/Conv_2/Conv2D", "inception_v3/mixed_17x17x768d/branch7x7dbl/Conv_1/BatchNorm/batchnorm/sub", "inception_v3/mixed_17x17x768e/branch7x7dbl/Conv_2/Conv2D", "_cloopmap/while/convert_image/Cast/_791", "inception_v3/mixed_35x35x256a/branch_pool/AvgPool/AvgPool", "inception_v3/mixed_8x8x2048a/branch1x1/Conv/Conv2D", "map/while/DecodeJpeg", "inception_v3/mixed_8x8x2048a/branch3x3dbl/Conv_1/Conv2D", "inception_v3/mixed_35x35x288b/branch3x3dbl/Conv_2/Conv2D", "map/while/strided_slice_2/stack", "mixed_17x17x768e/branch7x7dbl/Conv_4/weights/read", "inception_v3/mixed_17x17x768c/branch7x7dbl/Conv_1/Relu", "inception_v3/mixed_17x17x768e/branch_pool/Conv/Conv2D", "inception_v3/mixed_35x35x288a/branch1x1/Conv/BatchNorm/batchnorm/add_1", "inception_v3/mixed_35x35x288b/branch1x1/Conv/Conv2D", "mixed_8x8x2048b/branch3x3dbl/Conv_3/BatchNorm/beta", "inception_v3/mixed_17x17x768b/concat", "map/while/Sub"};
+  // // std::unordered_set<int> mySet = {1039, 29, 513, 755, 33, 1704, 1675, 1219, 473, 59, 42, 42, 59, 59, 42, 61, 42, 42, 129, 197, 268, 335, 441, 488, 600, 671, 770, 844, 943, 1017, 1115, 1190, 1289, 1380, 1451, 1521, 1590, 1645, 1729};
+  // // Yitao-TLS-End
 
   while (!inline_ready.empty()) {
 
@@ -1680,65 +1687,91 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     const NodeItem& item = *gview.node(id);
 
 
-    // Yitao-TLS-Begin
-    // LOG(INFO) << "[Yitao] pop Node " << id << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs with device " << node->assigned_device_name() << " in process " << process_id;
+    // // Yitao-TLS-Begin
+    // // LOG(INFO) << "[Yitao] pop Node " << id << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs with device " << node->assigned_device_name() << " in process " << process_id;
 
-    bool tmpCheckNodeHasHighCost = false;
+    // bool tmpCheckNodeHasHighCost = false;
 
-    if (*cost_model_generated) {
+    // if (*cost_model_generated) {
 
-      // if (sess_run_id == 10 && process_id == 1) {
-      //   LOG(INFO) << "[Yitao] pop Node " << id << " " << node->type_string() << " " << node->name() << " with cost of " << (*TLS_cost_model)[node->name()] << " on device " << node->assigned_device_name() << " in process " << process_id;
-      // }
+    //   // if (sess_run_id == 10 && process_id == 1) {
+    //   //   LOG(INFO) << "[Yitao] pop Node " << id << " " << node->type_string() << " " << node->name() << " with cost of " << (*TLS_cost_model)[node->name()] << " on device " << node->assigned_device_name() << " in process " << process_id;
+    //   // }
+
+    //   // if (sess_run_id == 10) {
+    //   //   LOG(INFO) << "[Yitao] pop Node " << id << " " << node->type_string() << " " << node->name() << " " << (item.kernel_is_expensive? "is expensive" : "is inexpensive") << " with cost of " << (*TLS_cost_model)[node->name()] << " on device " << node->assigned_device_name() << " in process " << process_id;
+    //   // }
 
       
-      tmpCheckNodeHasHighCost = checkNodeHasHighCost(node, TLS_cost_model, cumulatedCost, sess_run_id, process_id);
+    //   tmpCheckNodeHasHighCost = checkNodeHasHighCost(node, TLS_cost_model, cumulatedCost, sess_run_id, process_id);
 
-      // if (mySet.find(node->id()) != mySet.end()) {
-      //   tmpCheckNodeHasHighCost = true;
-      // } else {
-      //   tmpCheckNodeHasHighCost = false;
-      // }
+    //   // if (mySet.find(node->id()) != mySet.end()) {
+    //   //   tmpCheckNodeHasHighCost = true;
+    //   // } else {
+    //   //   tmpCheckNodeHasHighCost = false;
+    //   // }
 
 
-      if (tmpCheckNodeHasHighCost) { // <====== should_we_push_this_node(node) for node level scheduling here
-        {
-          // since we are modifying the shared TLS_queue,
-          // we need sched_lock to protect it.
-          std::unique_lock<std::mutex> lk(*sched_lock);
-          TLS_queue->push(sessRunInfo(sess_id, sess_run_id));
-          // LOG(INFO) << "[Process] pushing sess_id = " << sess_id << ", sess_run_id = " << sess_run_id << " to queue! After push, TLS_queue->size = " << TLS_queue->size();
-        }
+    //   if (tmpCheckNodeHasHighCost) { // <====== should_we_push_this_node(node) for node level scheduling here
+    //     {
+    //       // since we are modifying the shared TLS_queue,
+    //       // we need sched_lock to protect it.
+    //       std::unique_lock<std::mutex> lk(*sched_lock);
+    //       TLS_queue->push(sessRunInfo(sess_id, sess_run_id));
+    //       // LOG(INFO) << "[Process] pushing sess_id = " << sess_id << ", sess_run_id = " << sess_run_id << " to queue! After push, TLS_queue->size = " << TLS_queue->size();
+    //     }
 
-        // notify TLS_scheduler to schedule the next node in TLS queue
-        TLS_cv->notify_all();
+    //     // notify TLS_scheduler to schedule the next node in TLS queue
+    //     TLS_cv->notify_all();
 
-        {
-          std::unique_lock<std::mutex> lk(*sched_lock);
-          *cv_check_count += 1;
-          sched_cv->wait(lk, [this](){
-            // print some meta-data for debuging
-            bool tmp = *next_sess_id == sess_id && *next_sess_run_id == sess_run_id;
-            // LOG(INFO) << "[meta] sess_id = " << sess_id << ", sess_run_id = " << sess_run_id << ", next_sess_id = " << *next_sess_id << ", next_sess_run_id = " << *next_sess_run_id << ((tmp) ? " => true" : " => false");
+    //     {
+    //       std::unique_lock<std::mutex> lk(*sched_lock);
+    //       *cv_check_count += 1;
+    //       sched_cv->wait(lk, [this](){
+    //         // print some meta-data for debuging
+    //         bool tmp = *next_sess_id == sess_id && *next_sess_run_id == sess_run_id;
+    //         // LOG(INFO) << "[meta] sess_id = " << sess_id << ", sess_run_id = " << sess_run_id << ", next_sess_id = " << *next_sess_id << ", next_sess_run_id = " << *next_sess_run_id << ((tmp) ? " => true" : " => false");
             
-            // reset next_sess_id and next_sess_run_id.
-            // Without doing so, then if next Sess.run() happen to have the same sess_id,
-            // it will be executed as well as be pushed into the queue, leading to bug
-            if (tmp) {
-              *next_sess_id = -1;
-              *next_sess_run_id = -1;
-            }
-            return tmp;
-          });
-          // If we reach this point, TLS_scheduler's notify_all() has worked,
-          // so we can stop TLS_scheduler's while loop for notify_all().
-          *notify_done = true;
-        }
-      }
-    }
-    // Yitao-TLS-End
+    //         // reset next_sess_id and next_sess_run_id.
+    //         // Without doing so, then if next Sess.run() happen to have the same sess_id,
+    //         // it will be executed as well as be pushed into the queue, leading to bug
+    //         if (tmp) {
+    //           *next_sess_id = -1;
+    //           *next_sess_run_id = -1;
+    //         }
+    //         return tmp;
+    //       });
+    //       // If we reach this point, TLS_scheduler's notify_all() has worked,
+    //       // so we can stop TLS_scheduler's while loop for notify_all().
+    //       *notify_done = true;
+    //     }
+    //   }
+    // }
+    // // Yitao-TLS-End
 
-
+    // // Yitao-TLS-Begin
+    // bool thisIsGpuNode = node->assigned_device_name().find("gpu") != std::string::npos;
+    // if (*cost_model_generated) {
+    //   if (thisIsGpuNode) {
+    //     const std::string node_name = node->name();
+    //     if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
+    //       std::unique_lock<std::mutex> lk(*sched_lock);
+    //       *my_cumulated_cost += (*TLS_cost_model)[node_name];
+    //       if ((*my_cumulated_cost) >= 200) {
+    //         *my_cumulated_cost = 0;
+    //         olympia_scheduler->SessRunYield(sr_info);
+    //       }
+    //     }
+    //   }
+    // }
+    // if (*cost_model_generated) {
+    //   if (thisIsGpuNode) {
+    //     std::unique_lock<std::mutex> lk(*sched_lock);
+    //     *cv_check_count += 1;
+    //     my_cv->wait(lk, [sr_info, this](){return sr_info == this->olympia_scheduler->GetCurSessRunInfo();});
+    //   }
+    // }
+    // // Yitao-TLS-End
 
     // TODO(misard) Replace with a finer-grain enabling flag once we
     // add better optional debugging support.
@@ -1970,13 +2003,13 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     }
 
 
-    // Yitao-TLS-Begin
-    if (*cost_model_generated) {
-      if (tmpCheckNodeHasHighCost) { // <====== should_we_push_this_node(node) for node level scheduling here
-        TLS_cv->notify_all();
-      }
-    }
-    // Yitao-TLS-End
+    // // Yitao-TLS-Begin
+    // if (*cost_model_generated) {
+    //   if (tmpCheckNodeHasHighCost) { // <====== should_we_push_this_node(node) for node level scheduling here
+    //     TLS_cv->notify_all();
+    //   }
+    // }
+    // // Yitao-TLS-End
 
 
   }  // while !inline_ready.empty()
