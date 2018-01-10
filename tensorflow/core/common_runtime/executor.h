@@ -110,7 +110,7 @@ public:
 
     // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
     cur_sr_info = sr_queue.top();
-    // LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
+    LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
     std::condition_variable* cur_cv = cv_map[cur_sr_info];
     lk.unlock();
     cur_cv->notify_all();
@@ -124,7 +124,7 @@ public:
 
     // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
     cur_sr_info = sr_queue.top();
-    // LOG(INFO) << "[Yitao] in SessRunDeregister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
+    LOG(INFO) << "[Yitao] in SessRunDeregister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
     std::condition_variable* cur_cv = cv_map[cur_sr_info];
     lk.unlock();
     cur_cv->notify_all();
@@ -135,10 +135,10 @@ public:
     // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
     cur_sr_info = sr_queue.top();
 
-    // if (cur_sr_info != sr_info) {
-    //   LOG(INFO) << "[Yitao] (" << sr_info.sess_id << ", " << sr_info.run_id << ") yielded to (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
-    // }
-    // LOG(INFO) << "[Yitao] in SessRunYield(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
+    if (cur_sr_info != sr_info) {
+      LOG(INFO) << "[Yitao] (" << sr_info.sess_id << ", " << sr_info.run_id << ") yielded to (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
+    }
+    LOG(INFO) << "[Yitao] in SessRunYield(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
 
     std::condition_variable* cur_cv = cv_map[cur_sr_info];
     lk.unlock();
