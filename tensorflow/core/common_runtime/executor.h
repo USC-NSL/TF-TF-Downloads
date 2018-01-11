@@ -155,13 +155,14 @@ public:
     }
   }
 
-  void SessRunYieldOrRun(SessRunInfo sr_info) {
+  void SessRunYieldOrRun(SessRunInfo sr_info, const tensorflow::Node* node, int process_id) {
     std::unique_lock<std::mutex> lk(sched_lock);
     std::condition_variable* my_cv = cv_map[sr_info];
-    my_cv->wait(lk, [sr_info, this]() {
+    my_cv->wait(lk, [sr_info, node, process_id, this]() {
       bool tmp = (sr_info == this->token_info);
       if (!tmp) {
-        LOG(INFO) << "[Yitao] cv.wait: sr_info = (" << sr_info.sess_id << ", " << sr_info.run_id << ") != token_info = (" << token_info.sess_id << ", " << token_info.run_id << "), thread suspended";
+        // LOG(INFO) << "[Yitao] cv.wait: sr_info = (" << sr_info.sess_id << ", " << sr_info.run_id << ") != token_info = (" << token_info.sess_id << ", " << token_info.run_id << "), thread suspended";
+        LOG(INFO) << "[Yitao] cv.wait: sr_info = (" << sr_info.sess_id << ", " << sr_info.run_id << ") != token_info = (" << token_info.sess_id << ", " << token_info.run_id << "), thread suspended on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
       }
       return tmp;
     });
