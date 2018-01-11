@@ -95,71 +95,94 @@ class OlympiaScheduler{
 public:
   OlympiaScheduler() {
     // cout << "OlympiaScheduler initialized..." << endl;
-    sched_lock = new std::mutex;
-    cur_sr_info = SessRunInfo(-1, -1);
+    token_info = SessRunInfo(-1, -1);
     // notify_done = new bool;
   }
 
   void SessRunRegister(SessRunInfo sr_info, std::condition_variable* my_cv, int* my_cumulated_cost) {
-    std::unique_lock<std::mutex> lk(*sched_lock);
+    std::unique_lock<std::mutex> lk(sched_lock);
     sr_queue.push(sr_info);
     cv_map[sr_info] = my_cv;
     cumulate_cost_map[sr_info] = my_cumulated_cost;
 
-    // LOG(INFO) << "[Yitao] after register (" << sr_info.sess_id << ", " << sr_info.run_id << "), sr_queue.size() = " << sr_queue.size();
+    // should update token_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
+    // if (sr_queue.size() == 1) {    // <=============== pay attention! need to deal with only one job running, so we need to update token
+    //   token_info = sr_queue.top();
+    //   LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << token_info.sess_id << ", " << token_info.run_id << ")...";
+    //   std::condition_variable* cur_cv = cv_map[token_info];
+    //   lk.unlock();
+    //   cur_cv->notify_all();
+    // } else {
+    //   LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's previous token keep running...";
+    //   lk.unlock();
+    // }
 
-    // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
-    cur_sr_info = sr_queue.top();
-    LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
-    std::condition_variable* cur_cv = cv_map[cur_sr_info];
+    token_info = sr_queue.top();
+    LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << token_info.sess_id << ", " << token_info.run_id << ")...";
+    std::condition_variable* cur_cv = cv_map[token_info];
     lk.unlock();
     cur_cv->notify_all();
   }
 
   void SessRunDeregister(SessRunInfo sr_info) {
-    std::unique_lock<std::mutex> lk(*sched_lock);
+    std::unique_lock<std::mutex> lk(sched_lock);
     sr_queue.remove(sr_info);
+    // cv_map.erase(sr_info);
+    // cumulate_cost_map.erase(sr_info);
 
-    // LOG(INFO) << "[Yitao] after deregister (" << sr_info.sess_id << ", " << sr_info.run_id << "), sr_queue.size() = " << sr_queue.size();
-
-    // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
-    cur_sr_info = sr_queue.top();
-    LOG(INFO) << "[Yitao] in SessRunDeregister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
-    std::condition_variable* cur_cv = cv_map[cur_sr_info];
+    // should update token_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
+    token_info = sr_queue.top();
+    LOG(INFO) << "[Yitao] in SessRunDeregister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << token_info.sess_id << ", " << token_info.run_id << ")...";
+    std::condition_variable* cur_cv = cv_map[token_info];
     lk.unlock();
     cur_cv->notify_all();
   }
 
-  void SessRunYield(SessRunInfo sr_info) {
-    std::unique_lock<std::mutex> lk(*sched_lock);
-    // should update cur_sr_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
-    cur_sr_info = sr_queue.top();
+  void SessRunUpdateTokenInfo(SessRunInfo sr_info) {
+    std::unique_lock<std::mutex> lk(sched_lock);
 
-    if (cur_sr_info != sr_info) {
-      LOG(INFO) << "[Yitao] (" << sr_info.sess_id << ", " << sr_info.run_id << ") yielded to (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
+    // should update token_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
+    token_info = sr_queue.top();
+
+    if (token_info != sr_info) {
+      LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's switch to (" << token_info.sess_id << ", " << token_info.run_id << ")!";
+      std::condition_variable* cur_cv = cv_map[token_info];
+      lk.unlock();
+      cur_cv->notify_all();
+    } else {
+      LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << "), keep the same SessRun...";
+      lk.unlock();
     }
-    LOG(INFO) << "[Yitao] in SessRunYield(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << cur_sr_info.sess_id << ", " << cur_sr_info.run_id << ")...";
+  }
 
-    std::condition_variable* cur_cv = cv_map[cur_sr_info];
+  void SessRunYieldOrRun(SessRunInfo sr_info) {
+    std::unique_lock<std::mutex> lk(sched_lock);
+    std::condition_variable* my_cv = cv_map[sr_info];
+    my_cv->wait(lk, [sr_info, this]() {
+      bool tmp = (sr_info == this->token_info);
+      if (!tmp) {
+        LOG(INFO) << "[Yitao] cv.wait: sr_info = (" << sr_info.sess_id << ", " << sr_info.run_id << ") != token_info = (" << token_info.sess_id << ", " << token_info.run_id << "), thread suspended";
+      }
+      return tmp;
+    });
+
     lk.unlock();
-    cur_cv->notify_all();
   }
 
-  std::mutex* GetSchedLock() {
-    return sched_lock;
-  }
+  // std::mutex* GetSchedLock() {
+  //   return sched_lock;
+  // }
 
-  SessRunInfo GetCurSessRunInfo() {
-    return cur_sr_info;
-  }
-
-  std::unordered_map<SessRunInfo, std::condition_variable*> cv_map;
-  std::unordered_map<SessRunInfo, int*> cumulate_cost_map;
+  // SessRunInfo GetCurSessRunInfo() {
+  //   return token_info;
+  // }
 
 private:
-  std::mutex* sched_lock; // shared by all sessRuns' cv
-  SessRunInfo cur_sr_info;
+  SessRunInfo token_info;
+  std::unordered_map<SessRunInfo, std::condition_variable*> cv_map;
+  std::unordered_map<SessRunInfo, int*> cumulate_cost_map;
   // bool* notify_done;
+  std::mutex sched_lock;
 
   CustomPriorityQueue<SessRunInfo> sr_queue;
 
@@ -248,7 +271,7 @@ class Executor {
     NodeOutputsCallback node_outputs_cb = nullptr;
 
     // Yitao-TLS-Begin
-    int sess_id;
+    // int sess_id;
 
     // int* next_sess_id;
     // int* next_sess_run_id;
@@ -261,14 +284,19 @@ class Executor {
 
     // std::priority_queue<sessRunInfo>* TLS_queue;
 
-    int sess_run_id;
+    // int sess_run_id;
 
+    // *** Per Session
     bool* cost_model_generated;
     std::unordered_map<string, int>* TLS_cost_model; 
-
     OlympiaScheduler* olympia_scheduler;
 
+    // *** Per Session::Run
     int* cv_check_count;
+    SessRunInfo sr_info;
+    std::condition_variable* my_cv;
+    int* my_cumulated_cost;
+    std::mutex* my_lock;
     // Yitao-TLS-End
 
   };

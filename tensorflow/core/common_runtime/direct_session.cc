@@ -260,15 +260,17 @@ class DirectSessionFactory : public SessionFactory {
 
     // Yitao-TLS-Begin
     // update the sess_count variable with lock to make sure it is thread-safe
+    int sess_count_value;
     {
       mutex_lock l(sessions_lock_);
       sess_count += 1;
+      sess_count_value = sess_count;
     }
-    LOG(INFO) << "[Yitao] Testing: DirectSessionFactory::NewSession(), we have " << GetSessionCount() << " DirectSessions now! @@@@@@";
+    LOG(INFO) << "[Yitao] Testing: DirectSessionFactory::NewSession(), we have " << sess_count_value << " DirectSessions now! @@@@@@";
     // Yitao-TLS-End
 
     DirectSession* session =
-        new DirectSession(options, new DeviceMgr(devices), this, sess_count);
+        new DirectSession(options, new DeviceMgr(devices), this, sess_count_value);
     {
       mutex_lock l(sessions_lock_);
       sessions_.push_back(session);
@@ -633,13 +635,12 @@ Status DirectSession::Run(const RunOptions& run_options,
 
   // Yitao-TLS-Begin
   SessRunInfo sr_info = SessRunInfo(sess_id, sess_run_id);
-  std::mutex* sched_lock = olympia_scheduler->GetSchedLock();
   std::condition_variable* my_cv = new std::condition_variable;
   int* my_cumulated_cost = new int;
   *my_cumulated_cost = 0;
+  std::mutex* my_lock = new std::mutex;
 
   {
-    // std::unique_lock<std::mutex> lk(*sched_lock);
     olympia_scheduler->SessRunRegister(sr_info, my_cv, my_cumulated_cost);
   }
   // Yitao-TLS-End
@@ -846,7 +847,7 @@ Status DirectSession::Run(const RunOptions& run_options,
   }
 
   // Yitao-TLS-Begin
-  args.sess_id = sess_id;
+  // args.sess_id = sess_id;
 
   // args.next_sess_id = next_sess_id;
   // args.next_sess_run_id = next_sess_run_id;
@@ -859,14 +860,19 @@ Status DirectSession::Run(const RunOptions& run_options,
 
   // args.TLS_queue = TLS_queue;
 
-  args.sess_run_id = sess_run_id;
+  // args.sess_run_id = sess_run_id;
 
+  // *** Per Session
   args.cost_model_generated = cost_model_generated;
   args.TLS_cost_model = TLS_cost_model;
-
   args.olympia_scheduler = olympia_scheduler;
 
+  // *** Per Session::Run
   args.cv_check_count = cv_check_count;
+  args.sr_info = sr_info;
+  args.my_cv = my_cv;
+  args.my_cumulated_cost = my_cumulated_cost;
+  args.my_lock = my_lock;
 
   LOG(INFO) << "[Yitao] There are " << num_executors << " Executors in executors_and_keys...";
   // Yitao-TLS-End
@@ -984,7 +990,6 @@ Status DirectSession::Run(const RunOptions& run_options,
 
   // Yitao-TLS-Begin
   {
-    // std::unique_lock<std::mutex> lk(*sched_lock);
     olympia_scheduler->SessRunDeregister(sr_info);
   }
   // Yitao-TLS-End

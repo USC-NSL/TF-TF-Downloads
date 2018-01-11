@@ -1200,7 +1200,7 @@ class ExecutorState {
   Executor::DoneCallback done_cb_;
 
   // Yitao-TLS-Begin
-  int sess_id;
+  // int sess_id;
 
   // int* next_sess_id;
   // int* next_sess_run_id;
@@ -1213,14 +1213,19 @@ class ExecutorState {
 
   // std::priority_queue<sessRunInfo>* TLS_queue;
 
-  int sess_run_id;
+  // int sess_run_id;
 
+  // *** Per Session
   bool* cost_model_generated;
   std::unordered_map<string, int>* TLS_cost_model; 
-
   OlympiaScheduler* olympia_scheduler;
 
+  // *** Per Session::Run
   int* cv_check_count;
+  SessRunInfo sr_info;
+  std::condition_variable* my_cv;
+  int* my_cumulated_cost;
+  std::mutex* my_lock;
 
   int process_count;
   // Yitao-TLS-End
@@ -1331,7 +1336,7 @@ ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
       cancellation_manager_(args.cancellation_manager),
       runner_(args.runner),
       sync_on_finish_(args.sync_on_finish),
-      sess_id(args.sess_id),                            // Yitao-TLS-Begin
+      // sess_id(args.sess_id),                            // Yitao-TLS-Begin
       // next_sess_id(args.next_sess_id),                  // Yitao-TLS-Begin
       // next_sess_run_id(args.next_sess_run_id),          // Yitao-TLS-Begin
       // notify_done(args.notify_done),                    // Yitao-TLS-Begin
@@ -1339,11 +1344,15 @@ ExecutorState::ExecutorState(const Executor::Args& args, ExecutorImpl* impl)
       // TLS_cv(args.TLS_cv),                              // Yitao-TLS-Begin
       // sched_cv(args.sched_cv),                          // Yitao-TLS-Begin
       // TLS_queue(args.TLS_queue),                        // Yitao-TLS-Begin
-      sess_run_id(args.sess_run_id),                    // Yitao-TLS-Begin
+      // sess_run_id(args.sess_run_id),                    // Yitao-TLS-Begin
       cost_model_generated(args.cost_model_generated),  // Yitao-TLS-Begin
       TLS_cost_model(args.TLS_cost_model),              // Yitao-TLS-Begin
       olympia_scheduler(args.olympia_scheduler),        // Yitao-TLS-Begin
       cv_check_count(args.cv_check_count),              // Yitao-TLS-Begin
+      sr_info(args.sr_info),                            // Yitao-TLS-Begin
+      my_cv(args.my_cv),                                // Yitao-TLS-Begin
+      my_cumulated_cost(args.my_cumulated_cost),        // Yitao-TLS-Begin
+      my_lock(args.my_lock),                            // Yitao-TLS-Begin
       process_count(0),               // Yitao-TLS-Begin
       num_outstanding_ops_(0) {
   // We start the entire execution in iteration 0 of the root frame
@@ -1620,10 +1629,6 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     //   LOG(INFO) << "[Yitao] Now there are " << process_count << " Process() called with node " << tagged_node.node->id() << " " << tagged_node.node->type_string() << " " << tagged_node.node->name() << " with device " << tagged_node.node->assigned_device_name();
     // }
   }
-  SessRunInfo sr_info = SessRunInfo(sess_id, sess_run_id);
-  std::mutex* sched_lock = olympia_scheduler->GetSchedLock();
-  std::condition_variable* my_cv = olympia_scheduler->cv_map[sr_info];
-  int* my_cumulated_cost = olympia_scheduler->cumulate_cost_map[sr_info];
   // Yitao-TLS-End
 
   const GraphView& gview = impl_->gview_;
@@ -1749,42 +1754,63 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     // }
     // // Yitao-TLS-End
 
-    // Yitao-TLS-Begin
- //    if (*cost_model_generated) {
-	// 	LOG(INFO) << "[Yitao] pop Node " << id << " " << node->type_string() << " " << node->name() << " with cost of " << (*TLS_cost_model)[node->name()] << " on device " << node->assigned_device_name() << " in process " << process_id;
-	// }
+    // // Yitao-TLS-Begin
+    // bool shouldYield = false;
+    // bool thisIsGpuNode = node->assigned_device_name().find("gpu") != std::string::npos;
+    // if (*cost_model_generated) {
+    //   if (thisIsGpuNode) {
+    //     const std::string node_name = node->name();
+    //     if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
+    //       std::unique_lock<std::mutex> lk(*sched_lock);
+    //       *my_cumulated_cost += (*TLS_cost_model)[node_name];
+    //       if ((*my_cumulated_cost) >= 200) {
+    //         *my_cumulated_cost = 0;
+    //         shouldYield = true;
+    //       }
+    //     }
+    //     if (shouldYield) {
+    //       olympia_scheduler->SessRunYield(sr_info);
+    //     }
+    //   }
+    // }
+    // if (*cost_model_generated) {
+    //   if (thisIsGpuNode) {
+    //     std::unique_lock<std::mutex> lk(*sched_lock);
+    //     *cv_check_count += 1;
+    //     my_cv->wait(lk, [sr_info, this](){
+    //       // return sr_info == this->olympia_scheduler->GetCurSessRunInfo();
+    //       SessRunInfo token_info = this->olympia_scheduler->GetCurSessRunInfo();
+    //       bool tmp = (sr_info == token_info);
+    //       if (!tmp) {
+    //         LOG(INFO) << "[Yitao] sr_info = (" << sr_info.sess_id << ", " << sr_info.run_id << ") != token_info = (" << token_info.sess_id << ", " << token_info.run_id << ")";
+    //       }
+    //       return tmp;
+    //     });
+    //   }
+    // }
+    // // Yitao-TLS-End
 
-    bool shouldYield = false;
+    // Yitao-TLS-Begin
     bool thisIsGpuNode = node->assigned_device_name().find("gpu") != std::string::npos;
     if (*cost_model_generated) {
       if (thisIsGpuNode) {
-        const std::string node_name = node->name();
-        if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
-          std::unique_lock<std::mutex> lk(*sched_lock);
-          *my_cumulated_cost += (*TLS_cost_model)[node_name];
-          if ((*my_cumulated_cost) >= 20000) {
-            *my_cumulated_cost = 0;
-            shouldYield = true;
-          }
+        // {
+        //   const std::string node_name = node->name();
+        //   if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
+        //     std::unique_lock<std::mutex> my_lk(*my_lock);
+        //     *my_cumulated_cost += (*TLS_cost_model)[node_name];
+        //     if ((*my_cumulated_cost) >= 200) {
+        //       *my_cumulated_cost = 0;
+        //       my_lk.unlock(); // <===== Do we need that?
+        //       olympia_scheduler->SessRunUpdateTokenInfo(sr_info);
+        //     } else {
+        //       my_lk.unlock();
+        //     }
+        //   }
+        // }
+        {
+          olympia_scheduler->SessRunYieldOrRun(sr_info);
         }
-        if (shouldYield) {
-          olympia_scheduler->SessRunYield(sr_info);
-        }
-      }
-    }
-    if (*cost_model_generated) {
-      if (thisIsGpuNode) {
-        std::unique_lock<std::mutex> lk(*sched_lock);
-        *cv_check_count += 1;
-        my_cv->wait(lk, [sr_info, this](){
-          // return sr_info == this->olympia_scheduler->GetCurSessRunInfo();
-          SessRunInfo token_info = this->olympia_scheduler->GetCurSessRunInfo();
-          bool tmp = (sr_info == token_info);
-          if (!tmp) {
-            LOG(INFO) << "[Yitao] sr_info = (" << sr_info.sess_id << ", " << sr_info.run_id << ") != token_info = (" << token_info.sess_id << ", " << token_info.run_id << ")";
-          }
-          return tmp;
-        });
       }
     }
     // Yitao-TLS-End
