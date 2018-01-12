@@ -99,11 +99,12 @@ public:
     // notify_done = new bool;
   }
 
-  void SessRunRegister(SessRunInfo sr_info, std::condition_variable* my_cv, int* my_cumulated_cost) {
+  void SessRunRegister(SessRunInfo sr_info) {
     std::unique_lock<std::mutex> lk(sched_lock);
     sr_queue.push(sr_info);
+    std::condition_variable* my_cv = new std::condition_variable;
     cv_map[sr_info] = my_cv;
-    cumulate_cost_map[sr_info] = my_cumulated_cost;
+    // cumulate_cost_map[sr_info] = my_cumulated_cost;
 
     // should update token_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
     // if (sr_queue.size() == 1) {    // <=============== pay attention! need to deal with only one job running, so we need to update token
@@ -118,10 +119,10 @@ public:
     // }
 
     token_info = sr_queue.top();
-    LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's notify (" << token_info.sess_id << ", " << token_info.run_id << ")...";
-    std::condition_variable* cur_cv = cv_map[token_info];
+    LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), change token to (" << token_info.sess_id << ", " << token_info.run_id << ")...";
+    // std::condition_variable* cur_cv = cv_map[token_info];
     lk.unlock();
-    cur_cv->notify_all();
+    // cur_cv->notify_all();
   }
 
   void SessRunDeregister(SessRunInfo sr_info) {
@@ -138,31 +139,44 @@ public:
     cur_cv->notify_all();
   }
 
-  void SessRunUpdateTokenInfo(SessRunInfo sr_info) {
-    std::unique_lock<std::mutex> lk(sched_lock);
+  // void SessRunUpdateTokenInfo(SessRunInfo sr_info, const tensorflow::Node* node, int process_id) {
+  //   std::unique_lock<std::mutex> lk(sched_lock);
 
-    // should update token_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
-    token_info = sr_queue.top();
+  //   // should update token_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
+  //   token_info = sr_queue.top();
 
-    if (token_info != sr_info) {
-      LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << "), let's switch to (" << token_info.sess_id << ", " << token_info.run_id << ")!";
-      std::condition_variable* cur_cv = cv_map[token_info];
-      lk.unlock();
-      cur_cv->notify_all();
-    } else {
-      LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << "), keep the same SessRun...";
-      lk.unlock();
-    }
-  }
+  //   if (token_info != sr_info) {
+  //     LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), let's switch to (" << token_info.sess_id << ", " << token_info.run_id << ")! on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
+  //     std::condition_variable* cur_cv = cv_map[token_info];
+  //     lk.unlock();
+  //     cur_cv->notify_all();
+  //   } else {
+  //     LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), keep the same SessRun... on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
+  //     lk.unlock();
+  //   }
+  // }
 
   void SessRunYieldOrRun(SessRunInfo sr_info, const tensorflow::Node* node, int process_id) {
+    // // case 2: no bug, see out27-case2
+    // return;
+    // // case 5: has bug, see out26-case5
+    // if (sr_info.run_id == 19)
+    //   return;
     std::unique_lock<std::mutex> lk(sched_lock);
+    // // case 6: has bug, see out29-case6
+    // if (sr_info == this->token_info)
+    //   return;
     std::condition_variable* my_cv = cv_map[sr_info];
     my_cv->wait(lk, [sr_info, node, process_id, this]() {
+      // // case 3: no bug see out28-case3
+      // return true;
+      // // case 4: has bug, see out25-case4
+      // if (sr_info.run_id == 19)
+      //   return true;
       bool tmp = (sr_info == this->token_info);
       if (!tmp) {
         // LOG(INFO) << "[Yitao] cv.wait: sr_info = (" << sr_info.sess_id << ", " << sr_info.run_id << ") != token_info = (" << token_info.sess_id << ", " << token_info.run_id << "), thread suspended";
-        LOG(INFO) << "[Yitao] cv.wait: sr_info = (" << sr_info.sess_id << ", " << sr_info.run_id << ") != token_info = (" << token_info.sess_id << ", " << token_info.run_id << "), thread suspended on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
+        LOG(INFO) << "[Yitao] cv.wait: sr_info = (" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << ") != token_info = (" << token_info.sess_id << ", " << token_info.run_id << "), thread suspended on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
       }
       return tmp;
     });
@@ -181,7 +195,7 @@ public:
 private:
   SessRunInfo token_info;
   std::unordered_map<SessRunInfo, std::condition_variable*> cv_map;
-  std::unordered_map<SessRunInfo, int*> cumulate_cost_map;
+  // std::unordered_map<SessRunInfo, int*> cumulate_cost_map;
   // bool* notify_done;
   std::mutex sched_lock;
 
@@ -295,7 +309,7 @@ class Executor {
     // *** Per Session::Run
     int* cv_check_count;
     SessRunInfo sr_info;
-    std::condition_variable* my_cv;
+    // std::condition_variable* my_cv;
     int* my_cumulated_cost;
     std::mutex* my_lock;
     // Yitao-TLS-End

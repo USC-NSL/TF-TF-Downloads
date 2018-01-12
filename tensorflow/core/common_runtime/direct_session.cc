@@ -629,19 +629,19 @@ Status DirectSession::Run(const RunOptions& run_options,
   }
   LOG(INFO) << "[Yitao] ****** DirectSession::Run(), we have sess_run_id = " << sess_run_id;
 
-  int* cv_check_count;
-  cv_check_count = new int;
-  *cv_check_count = 0;
-
   // Yitao-TLS-Begin
   SessRunInfo sr_info = SessRunInfo(sess_id, sess_run_id);
-  std::condition_variable* my_cv = new std::condition_variable;
+  // std::condition_variable* my_cv = new std::condition_variable;
   int* my_cumulated_cost = new int;
   *my_cumulated_cost = 0;
   std::mutex* my_lock = new std::mutex;
 
+  int* cv_check_count;
+  cv_check_count = new int;
+  *cv_check_count = 0;
+
   {
-    olympia_scheduler->SessRunRegister(sr_info, my_cv, my_cumulated_cost);
+    olympia_scheduler->SessRunRegister(sr_info);
   }
   // Yitao-TLS-End
 
@@ -870,7 +870,7 @@ Status DirectSession::Run(const RunOptions& run_options,
   // *** Per Session::Run
   args.cv_check_count = cv_check_count;
   args.sr_info = sr_info;
-  args.my_cv = my_cv;
+  // args.my_cv = my_cv;
   args.my_cumulated_cost = my_cumulated_cost;
   args.my_lock = my_lock;
 
