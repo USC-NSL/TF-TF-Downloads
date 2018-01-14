@@ -54,9 +54,11 @@ public:
 
   bool operator< (const SessRunInfo &other) const {
     if (sess_id != other.sess_id)
+      // sess_id < other.sess_id ===> (1, *) < (2, *)
       return sess_id < other.sess_id;
     else
-      return run_id > other.run_id;
+      // run_id < other.run_id ===> (a, 1) < (a, 2)
+      return run_id < other.run_id;
   }
 
   // friend ostream& operator<< (ostream& os, const SessRunInfo& sr_info);
@@ -139,22 +141,22 @@ public:
     cur_cv->notify_all();
   }
 
-  // void SessRunUpdateTokenInfo(SessRunInfo sr_info, const tensorflow::Node* node, int process_id) {
-  //   std::unique_lock<std::mutex> lk(sched_lock);
+  void SessRunUpdateTokenInfo(SessRunInfo sr_info, const tensorflow::Node* node, int process_id) {
+    std::unique_lock<std::mutex> lk(sched_lock);
 
-  //   // should update token_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
-  //   token_info = sr_queue.top();
+    // should update token_info and notify the corresponding cv here!!! <<<<<<<<<<<<<<<<<<<<
+    token_info = sr_queue.top();
 
-  //   if (token_info != sr_info) {
-  //     LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), let's switch to (" << token_info.sess_id << ", " << token_info.run_id << ")! on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
-  //     std::condition_variable* cur_cv = cv_map[token_info];
-  //     lk.unlock();
-  //     cur_cv->notify_all();
-  //   } else {
-  //     LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), keep the same SessRun... on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
-  //     lk.unlock();
-  //   }
-  // }
+    if (token_info != sr_info) {
+      LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), let's switch to (" << token_info.sess_id << ", " << token_info.run_id << ")! on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
+      std::condition_variable* cur_cv = cv_map[token_info];
+      lk.unlock();
+      cur_cv->notify_all();
+    } else {
+      LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), keep the same SessRun... on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
+      lk.unlock();
+    }
+  }
 
   void SessRunYieldOrRun(SessRunInfo sr_info, const tensorflow::Node* node, int process_id) {
     // // case 2: no bug, see out27-case2
