@@ -73,6 +73,12 @@ auto* direct_session_runs = monitoring::Counter<0>::New(
 
 int32 NumInterOpThreadsFromSessionOptions(const SessionOptions& options) {
   const int32 t = options.config.inter_op_parallelism_threads();
+
+  // Yitao-TLS-Begin
+  // The default num of thread is 12, let's force to set it as 1024
+  return 8192;
+  // Yitao-TLS-End
+
   if (t != 0) return t;
   // Default to using the number of cores available in the process.
   return port::NumSchedulableCPUs();
@@ -446,7 +452,9 @@ DirectSession::DirectSession(const SessionOptions& options,
 
   // Yitao-TLS-End
 
+  // Yitao-TLS-Begin
   if (options_.config.session_inter_op_thread_pool_size() > 0) {
+    LOG(INFO) << "[Yitao] in DirectSession::DirectSession(), case one with options_.config.session_inter_op_thread_pool_size() = " << options_.config.session_inter_op_thread_pool_size(); 
     for (int i = 0; i < options_.config.session_inter_op_thread_pool_size();
          ++i) {
       thread_pools_.push_back(NewThreadPoolFromThreadPoolOptions(
@@ -454,12 +462,16 @@ DirectSession::DirectSession(const SessionOptions& options,
     }
     owns_thread_pools_ = true;
   } else if (options_.config.use_per_session_threads()) {
+    LOG(INFO) << "[Yitao] in DirectSession::DirectSession(), case two with options_.config.use_per_session_threads() = " << options_.config.use_per_session_threads();
     thread_pools_.push_back(NewThreadPoolFromSessionOptions(options_));
     owns_thread_pools_ = true;
   } else {
+    LOG(INFO) << "[Yitao] in DirectSession::DirectSession(), case three...";
     thread_pools_.push_back(GlobalThreadPool(options));
     owns_thread_pools_ = false;
   }
+  // Yitao-TLS-End
+
   // The default value of sync_on_finish will be flipped soon and this
   // environment variable will be removed as well.
   Status status =
@@ -704,6 +716,11 @@ Status DirectSession::Run(const RunOptions& run_options,
                                    run_options.inter_op_thread_pool());
   }
   thread::ThreadPool* pool = thread_pools_[run_options.inter_op_thread_pool()];
+
+  // Yitao-TLS-Begin
+  LOG(INFO) << "[Yitao] in DirectSession::Run(), run_options.inter_op_thread_pool() = " << run_options.inter_op_thread_pool();
+  LOG(INFO) << "[Yitao] in DirectSession::Run(), pool->NumThreads() = " << pool->NumThreads();
+  // Yitao-TLS-End
 
   // Check if we already have an executor for these arguments.
   ExecutorsAndKeys* executors_and_keys;

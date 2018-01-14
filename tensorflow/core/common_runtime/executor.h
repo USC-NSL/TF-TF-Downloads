@@ -56,7 +56,7 @@ public:
     if (sess_id != other.sess_id)
       return sess_id < other.sess_id;
     else
-      return run_id < other.run_id;
+      return run_id > other.run_id;
   }
 
   // friend ostream& operator<< (ostream& os, const SessRunInfo& sr_info);
