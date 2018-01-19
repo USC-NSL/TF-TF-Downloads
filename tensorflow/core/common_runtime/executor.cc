@@ -2057,6 +2057,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
 
     // Yitao-TLS-Begin
     if (sr_info.run_id >= 15) {
+      const int cumu_cost_threshold = 12800;
       bool thisIsGpuNode = node->assigned_device_name().find("gpu") != std::string::npos;
       if (*cost_model_generated) {
         if (thisIsGpuNode) {
@@ -2065,8 +2066,8 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
             if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
               std::unique_lock<std::mutex> my_lk(*my_lock);
               *my_cumulated_cost += (*TLS_cost_model)[node_name];
-              if ((*my_cumulated_cost) >= 32000) {
-                *my_cumulated_cost = 0;
+              if ((*my_cumulated_cost) >= cumu_cost_threshold) {
+                *my_cumulated_cost -= cumu_cost_threshold;
                 // my_lk.unlock(); // <===== Do we need that?
                 olympia_scheduler->SessRunUpdateTokenInfo(sr_info, node, process_id);
               } 
