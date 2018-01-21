@@ -717,10 +717,10 @@ Status DirectSession::Run(const RunOptions& run_options,
   }
   thread::ThreadPool* pool = thread_pools_[run_options.inter_op_thread_pool()];
 
-  // Yitao-TLS-Begin
-  LOG(INFO) << "[Yitao] in DirectSession::Run(), run_options.inter_op_thread_pool() = " << run_options.inter_op_thread_pool();
-  LOG(INFO) << "[Yitao] in DirectSession::Run(), pool->NumThreads() = " << pool->NumThreads();
-  // Yitao-TLS-End
+  // // Yitao-TLS-Begin
+  // LOG(INFO) << "[Yitao] in DirectSession::Run(), run_options.inter_op_thread_pool() = " << run_options.inter_op_thread_pool();
+  // LOG(INFO) << "[Yitao] in DirectSession::Run(), pool->NumThreads() = " << pool->NumThreads();
+  // // Yitao-TLS-End
 
   // Check if we already have an executor for these arguments.
   ExecutorsAndKeys* executors_and_keys;
