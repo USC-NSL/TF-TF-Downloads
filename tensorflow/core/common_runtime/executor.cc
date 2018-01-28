@@ -1703,9 +1703,9 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     //   //   LOG(INFO) << "[Yitao] pop Node " << id << " " << node->type_string() << " " << node->name() << " with cost of " << (*TLS_cost_model)[node->name()] << " on device " << node->assigned_device_name() << " in process " << process_id;
     //   // }
 
-    //   // if (sess_run_id == 10) {
-    //   //   LOG(INFO) << "[Yitao] pop Node " << id << " " << node->type_string() << " " << node->name() << " " << (item.kernel_is_expensive? "is expensive" : "is inexpensive") << " with cost of " << (*TLS_cost_model)[node->name()] << " on device " << node->assigned_device_name() << " in process " << process_id;
-    //   // }
+      if (sr_info.run_id == 10) {
+        LOG(INFO) << "[Yitao] pop Node " << id << " " << node->type_string() << " " << node->name() << " " << (item.kernel_is_expensive? "is expensive" : "is inexpensive") << " with cost of " << (*TLS_cost_model)[node->name()] << " on device " << node->assigned_device_name() << " in process " << process_id;
+      }
 
       
     //   tmpCheckNodeHasHighCost = checkNodeHasHighCost(node, TLS_cost_model, cumulatedCost, sess_run_id, process_id);
@@ -2055,38 +2055,43 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     // }
     // // Yitao-TLS-End
 
-    // Yitao-TLS-Begin
-    if (sr_info.run_id >= 15) {
-      const int cumu_cost_threshold = 25600;
-      bool thisIsGpuNode = node->assigned_device_name().find("gpu") != std::string::npos;
-      if (*cost_model_generated) {
-        if (thisIsGpuNode) {
-          {
-            const std::string node_name = node->name();
-            if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
-              std::unique_lock<std::mutex> my_lk(*my_lock);
-              *my_cumulated_cost += (*TLS_cost_model)[node_name];
-              if ((*my_cumulated_cost) >= cumu_cost_threshold) {
-                *my_cumulated_cost -= cumu_cost_threshold;
-                // my_lk.unlock(); // <===== Do we need that?
-                olympia_scheduler->SessRunUpdateTokenInfo(sr_info, node, process_id);
-              } 
-            }
-          }
-          // const std::string node_type = node->type_string();
-          // // if (process_id != 2 && node->name().find("map/while") == std::string::npos && node_type.compare("_HostRecv") != 0 && node_type.compare("TensorArraySizeV3") != 0 && node_type.compare("VariableV2") != 0) {
-          // if (node->name().find("map/while") == std::string::npos) 
-          // {
-          //   olympia_scheduler->SessRunYieldOrRun(sr_info, node, process_id);
-          // }
-        }
-      }
-      if (*cost_model_generated) {
-        // LOG(INFO) << "[Yitao] finished Node (" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << ") " << id << " " << node->type_string() << " " << node->name() << " with cost of " << (*TLS_cost_model)[node->name()] << " on device " << node->assigned_device_name() << " in process " << process_id;
-        olympia_scheduler->SessRunYieldOrRun(sr_info, node, process_id);
-      }
-    }
-    // Yitao-TLS-End
+    // // Yitao-TLS-Begin
+    // if (sr_info.run_id >= 15) {
+    //   // const int cumu_cost_threshold = 200;
+    //   int cumu_cost_threshold;
+    //   if (sr_info.sess_id == 0)
+    //     cumu_cost_threshold = 2432;
+    //   else
+    //     cumu_cost_threshold = 934;
+    //   bool thisIsGpuNode = node->assigned_device_name().find("gpu") != std::string::npos;
+    //   if (*cost_model_generated) {
+    //     if (thisIsGpuNode) {
+    //       {
+    //         const std::string node_name = node->name();
+    //         if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
+    //           std::unique_lock<std::mutex> my_lk(*my_lock);
+    //           *my_cumulated_cost += (*TLS_cost_model)[node_name];
+    //           if ((*my_cumulated_cost) >= cumu_cost_threshold) {
+    //             *my_cumulated_cost -= cumu_cost_threshold;
+    //             // my_lk.unlock(); // <===== Do we need that?
+    //             olympia_scheduler->SessRunUpdateTokenInfo(sr_info, node, process_id);
+    //           } 
+    //         }
+    //       }
+    //       // const std::string node_type = node->type_string();
+    //       // // if (process_id != 2 && node->name().find("map/while") == std::string::npos && node_type.compare("_HostRecv") != 0 && node_type.compare("TensorArraySizeV3") != 0 && node_type.compare("VariableV2") != 0) {
+    //       // if (node->name().find("map/while") == std::string::npos) 
+    //       // {
+    //       //   olympia_scheduler->SessRunYieldOrRun(sr_info, node, process_id);
+    //       // }
+    //     }
+    //   }
+    //   if (*cost_model_generated) {
+    //     // LOG(INFO) << "[Yitao] finished Node (" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << ") " << id << " " << node->type_string() << " " << node->name() << " with cost of " << (*TLS_cost_model)[node->name()] << " on device " << node->assigned_device_name() << " in process " << process_id;
+    //     olympia_scheduler->SessRunYieldOrRun(sr_info, node, process_id);
+    //   }
+    // }
+    // // Yitao-TLS-End
 
 
   }  // while !inline_ready.empty()

@@ -217,11 +217,16 @@ void StepStatsCollector::BuildCostModel(
 
           // LOG(INFO) << "[Yitao] GPUTracer gets cost for node " << node_name << " = " << hw_stats.op_end_rel_micros();
 
+          LOG(INFO) << "[Yitao] GPUTracer gets cost for node " << node_name << " = " << hw_stats.op_end_rel_micros() << " with (" << hw_stats.all_start_micros() + hw_stats.op_start_rel_micros() << ", " << hw_stats.all_start_micros() + hw_stats.op_end_rel_micros() << ") on device " << device;
+
         } else {
           cm->RecordMaxExecutionTime(node,
                                      Microseconds(stats.op_end_rel_micros()));
 
           // LOG(INFO) << "[Yitao] default tracer gets cost for node " << node_name << " = " << stats.op_end_rel_micros();
+
+          LOG(INFO) << "[Yitao] DefaultTracer gets cost for node " << node_name << " = " << stats.op_end_rel_micros() << " with (" << stats.all_start_micros() + stats.op_start_rel_micros() << ", " << stats.all_start_micros() + stats.op_end_rel_micros() << ") on device " << device;
+
         }
       }
     }

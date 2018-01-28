@@ -99,7 +99,6 @@ public:
     // cout << "OlympiaScheduler initialized..." << endl;
     token_info = SessRunInfo(-1, -1);
     // notify_done = new bool;
-    flag = true;
   }
 
   void SessRunRegister(SessRunInfo sr_info) {
@@ -121,28 +120,13 @@ public:
     //   lk.unlock();
     // }
 
-    // if (sr_info.run_id == 15) {
-    //   if (sr_queue.size() == 1) {
-    //     LOG(INFO) << "[Yitao] in SessRunRegister(*, 15), we only have one model, let's wait...";
-    //     lk.unlock();
-    //     return;
-    //   } else {
-    //     LOG(INFO) << "[Yitao] in SessRunRegister(*, 15), now we have two models, let's run!";
-    //     token_info = sr_queue.top();
-    //     std::condition_variable* cur_cv = cv_map[token_info];
-    //     lk.unlock();
-    //     cur_cv->notify_all();
-    //     return;
-    //   }
-    // }
-
-    if (sr_info.run_id == 15 || sr_info.run_id == 16) {
+    if (sr_info.run_id == 15) {
       if (sr_queue.size() == 1) {
-        LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), we only have one request, let's wait...";
+        LOG(INFO) << "[Yitao] in SessRunRegister(*, 15), we only have one model, let's wait...";
         lk.unlock();
         return;
       } else {
-        LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), now we have two requests, let's run!";
+        LOG(INFO) << "[Yitao] in SessRunRegister(*, 15), now we have two models, let's run!";
         token_info = sr_queue.top();
         std::condition_variable* cur_cv = cv_map[token_info];
         lk.unlock();
@@ -150,6 +134,21 @@ public:
         return;
       }
     }
+
+    // if (sr_info.run_id == 15 || sr_info.run_id == 16) {
+    //   if (sr_queue.size() == 1) {
+    //     LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), we only have one request, let's wait...";
+    //     lk.unlock();
+    //     return;
+    //   } else {
+    //     LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), now we have two requests, let's run!";
+    //     token_info = sr_queue.top();
+    //     std::condition_variable* cur_cv = cv_map[token_info];
+    //     lk.unlock();
+    //     cur_cv->notify_all();
+    //     return;
+    //   }
+    // }
 
     token_info = sr_queue.top();
     LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), change token to (" << token_info.sess_id << ", " << token_info.run_id << ")...";
@@ -210,46 +209,18 @@ public:
     //   lk.unlock();
     // }
 
-    // // Case Three
-    // std::unique_lock<std::mutex> lk(sched_lock);
-    // if (sr_queue.size() == 1) {
-    //   token_info = sr_info;
-    //   LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), keep the same SessRun... on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
-    //   lk.unlock();
-    // } else if (sr_queue.size() == 2) {
-    //   if (sr_info == SessRunInfo(0, 15)) {
-    //     if (flag) {
-    //       token_info.sess_id = 0;
-    //       token_info.run_id = 15;
-    //       flag = false;
-    //     } else {
-    //       token_info.sess_id = 1;
-    //       token_info.run_id = 15;
-    //       flag = true;
-    //     }
-    //   } else {
-    //     token_info.sess_id = 0;
-    //     token_info.run_id = 15;
-    //   }
-    //   LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), let's switch to (" << token_info.sess_id << ", " << token_info.run_id << ")! on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
-    //   std::condition_variable* cur_cv = cv_map[token_info];
-    //   lk.unlock();
-    //   cur_cv->notify_all();
-    // } else {
-    //   LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), @@@@@@ BugBugBug @@@@@@... on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
-    //   lk.unlock();
-    // }
-
-    // Case Four
+    // Case Three
     std::unique_lock<std::mutex> lk(sched_lock);
     if (sr_queue.size() == 1) {
       token_info = sr_info;
       LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), keep the same SessRun... on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
       lk.unlock();
     } else if (sr_queue.size() == 2) {
-      if (sr_info.run_id == 15) {
-        token_info.run_id = 16;
+      if (sr_info == SessRunInfo(0, 15)) {
+        token_info.sess_id = 1;
+        token_info.run_id = 15;
       } else {
+        token_info.sess_id = 0;
         token_info.run_id = 15;
       }
       LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), let's switch to (" << token_info.sess_id << ", " << token_info.run_id << ")! on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
@@ -260,6 +231,27 @@ public:
       LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), @@@@@@ BugBugBug @@@@@@... on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
       lk.unlock();
     }
+
+    // // Case Four
+    // std::unique_lock<std::mutex> lk(sched_lock);
+    // if (sr_queue.size() == 1) {
+    //   token_info = sr_info;
+    //   LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), keep the same SessRun... on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
+    //   lk.unlock();
+    // } else if (sr_queue.size() == 2) {
+    //   if (sr_info.run_id == 15) {
+    //     token_info.run_id = 16;
+    //   } else {
+    //     token_info.run_id = 15;
+    //   }
+    //   LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), let's switch to (" << token_info.sess_id << ", " << token_info.run_id << ")! on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
+    //   std::condition_variable* cur_cv = cv_map[token_info];
+    //   lk.unlock();
+    //   cur_cv->notify_all();
+    // } else {
+    //   LOG(INFO) << "[Yitao] in SessRunUpdateTokenInfo(" << sr_info.sess_id << ", " << sr_info.run_id << ", " << process_id << "), @@@@@@ BugBugBug @@@@@@... on Node " << node->id() << " " << node->type_string() << " " << node->name() << " on device " << node->assigned_device_name() << " in process " << process_id;
+    //   lk.unlock();
+    // }
   }
 
   void SessRunYieldOrRun(SessRunInfo sr_info, const tensorflow::Node* node, int process_id) {
@@ -306,8 +298,6 @@ private:
   std::mutex sched_lock;
 
   CustomPriorityQueue<SessRunInfo> sr_queue;
-
-  bool flag;
 };
 // Yitao-TLS-End
 
