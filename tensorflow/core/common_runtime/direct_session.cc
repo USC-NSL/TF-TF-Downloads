@@ -76,7 +76,7 @@ int32 NumInterOpThreadsFromSessionOptions(const SessionOptions& options) {
 
   // Yitao-TLS-Begin
   // The default num of thread is 12, let's force to set it as 1024
-  return 8192;
+  return 9999;
   // Yitao-TLS-End
 
   if (t != 0) return t;
