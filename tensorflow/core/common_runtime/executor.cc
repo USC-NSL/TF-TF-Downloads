@@ -2060,9 +2060,9 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
       const int cumu_cost_threshold = 25600;
       // int cumu_cost_threshold;
       // if (sr_info.sess_id == 0)
-      //   cumu_cost_threshold = 2432;
+      //   cumu_cost_threshold = 6177;
       // else
-      //   cumu_cost_threshold = 934;
+      //   cumu_cost_threshold = 3694;
       bool thisIsGpuNode = node->assigned_device_name().find("gpu") != std::string::npos;
       if (*cost_model_generated) {
         if (thisIsGpuNode) {
