@@ -36,14 +36,17 @@ public:
   SessRunInfo() {
     sess_id = -1;
     run_id = -1;
+    priority = -1;
   }
-  SessRunInfo(int tt_sess_id, int tt_run_id) {
+  SessRunInfo(int tt_sess_id, int tt_run_id, int tt_priority = -1) {
     sess_id = tt_sess_id;
     run_id = tt_run_id;
+    priority = tt_priority;
   }
 
   int sess_id;
   int run_id;
+  int priority;
 
   bool operator==(const SessRunInfo &other) const {
     return (sess_id == other.sess_id && run_id == other.run_id);
@@ -54,12 +57,13 @@ public:
   }
 
   bool operator< (const SessRunInfo &other) const {
-    if (sess_id != other.sess_id)
-      // sess_id < other.sess_id ===> (1, *) < (2, *)
-      return sess_id < other.sess_id;
-    else
-      // run_id < other.run_id ===> (a, 1) < (a, 2)
-      return run_id < other.run_id;
+    // if (sess_id != other.sess_id)
+    //   // sess_id < other.sess_id ===> (1, *) < (2, *)
+    //   return sess_id < other.sess_id;
+    // else
+    //   // run_id < other.run_id ===> (a, 1) < (a, 2)
+    //   return run_id < other.run_id;
+    return priority < other.priority;
   }
 
   // friend ostream& operator<< (ostream& os, const SessRunInfo& sr_info);
@@ -358,37 +362,38 @@ public:
   void SessRunRegister(SessRunInfo sr_info) {
     std::unique_lock<std::mutex> lk(sched_lock);
     sr_queue.push_back(sr_info);
-    // if (sr_info.run_id >= 15 && (sr_info.run_id - 15) % 10 < 5) {
-    if (sr_info.run_id == 15) {
-      // weighted fair sharing
-      for (int i = 0; i < 99; i++)
-        sr_queue.push_back(sr_info);
+    if (sr_info.run_id >= 15) {
+      if (sr_info.priority >= 5) {
+        // weighted fair sharing
+        for (int i = 0; i < 9; i++)
+          sr_queue.push_back(sr_info);
+      }
     }
     std::condition_variable* my_cv = new std::condition_variable;
     cv_map[sr_info] = my_cv;
 
-    // force sync
-    if (sr_info.run_id == 15 || sr_info.run_id == 16) {
-      if (sr_queue.size() == 1) {
-        LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), we only have one request, let's wait...";
-        lk.unlock();
-        return;
-      } else {
-        LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), now we have two requests, let's run!";
-        // token_info = sr_queue.top();
-        token_info = sr_queue.front();
-        std::condition_variable* cur_cv = cv_map[token_info];
-        lk.unlock();
-        cur_cv->notify_all();
-        return;
-      }
-    }
+    // // force sync
+    // if (sr_info.run_id == 15 || sr_info.run_id == 16) {
+    //   if (sr_queue.size() == 1) {
+    //     LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), we only have one request, let's wait...";
+    //     lk.unlock();
+    //     return;
+    //   } else {
+    //     LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), now we have two requests, let's run!";
+    //     // token_info = sr_queue.top();
+    //     token_info = sr_queue.front();
+    //     std::condition_variable* cur_cv = cv_map[token_info];
+    //     lk.unlock();
+    //     cur_cv->notify_all();
+    //     return;
+    //   }
+    // }
 
-    // token_info = sr_queue.front();
-    // LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), change token to (" << token_info.sess_id << ", " << token_info.run_id << ")...";
-    // std::condition_variable* cur_cv = cv_map[token_info];
-    // lk.unlock();
-    // cur_cv->notify_all();
+    token_info = sr_queue.front();
+    LOG(INFO) << "[Yitao] in SessRunRegister(" << sr_info.sess_id << ", " << sr_info.run_id << "), change token to (" << token_info.sess_id << ", " << token_info.run_id << ")...";
+    std::condition_variable* cur_cv = cv_map[token_info];
+    lk.unlock();
+    cur_cv->notify_all();
   }
 
   void SessRunDeregister(SessRunInfo sr_info) {

@@ -641,8 +641,21 @@ Status DirectSession::Run(const RunOptions& run_options,
   }
   LOG(INFO) << "[Yitao] ****** DirectSession::Run(), we have sess_run_id = " << sess_run_id;
 
+  int tom_timeout = run_options.timeout_in_ms();
+  // LOG(INFO) << "[Yitao] ****** DirectSession::Run(), we have run_options.timeout_in_ms = " << tom_timeout;
+  // if (tom_timeout > 70000)
+  //   LOG(INFO) << "[Yitao] ... tom_timeout > 70k";
+  // else
+  //   LOG(INFO) << "[Yitao] ... tom_timeout <= 70k";
+
+
   // Yitao-TLS-Begin
   SessRunInfo sr_info = SessRunInfo(sess_id, sess_run_id);
+
+  sr_info.priority = (tom_timeout - 59000) / 10000;
+  LOG(INFO) << "[Yitao] ****** DirectSession::Run(), we have run_options.timeout_in_ms = " << tom_timeout << " with sr_info.priority = " << sr_info.priority;
+
+
   // std::condition_variable* my_cv = new std::condition_variable;
   int* my_cumulated_cost = new int;
   *my_cumulated_cost = 0;
