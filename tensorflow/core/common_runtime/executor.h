@@ -362,13 +362,14 @@ public:
   void SessRunRegister(SessRunInfo sr_info) {
     std::unique_lock<std::mutex> lk(sched_lock);
     sr_queue.push_back(sr_info);
-    if (sr_info.run_id >= 15) {
-      if (sr_info.priority >= 5) {
-        // weighted fair sharing
-        for (int i = 0; i < 9; i++)
-          sr_queue.push_back(sr_info);
-      }
-    }
+    // if (sr_info.run_id >= 15) {
+    //   if (sr_info.priority >= 5) { // <================
+    //   // if (sr_info.sess_id == 0) { // <================
+    //     // weighted fair sharing
+    //     for (int i = 0; i < 1; i++)
+    //       sr_queue.push_back(sr_info);
+    //   }
+    // }
     std::condition_variable* my_cv = new std::condition_variable;
     cv_map[sr_info] = my_cv;
 

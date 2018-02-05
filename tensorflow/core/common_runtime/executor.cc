@@ -1817,6 +1817,11 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     // }
     // // Yitao-TLS-End
 
+    // Yitao-TLS-Begin
+    int64 tom_node_start = 0;
+    int64 tom_node_end = 0;
+    // Yitao-TLS-End
+
     // TODO(misard) Replace with a finer-grain enabling flag once we
     // add better optional debugging support.
     if (vlog_ && VLOG_IS_ON(1)) {
@@ -1937,6 +1942,8 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
         OpKernelContext ctx(&params, item.num_outputs);
         if (stats) nodestats::SetOpStart(stats);
 
+        tom_node_start = nodestats::NowInUsec();
+
         // // Yitao-TLS-Begin
         // // LOG(INFO) << "pop Node " << node->id() << " " << node->type_string() << " " << node->name() << " " << node->in_edges().size() << " inputs";
         //     // std::string conv2dString = "Conv2D";
@@ -2012,6 +2019,8 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
 
         if (stats) nodestats::SetOpEnd(stats);
 
+        tom_node_end = nodestats::NowInUsec();
+
         s = ProcessOutputs(item, &ctx, &outputs, stats);
         if (s.ok() && impl_->device_record_tensor_accesses_) {
           // Get the list of all tensors accessed during the execution
@@ -2057,15 +2066,16 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
 
     // Yitao-TLS-Begin
     if (sr_info.run_id >= 15) {
-      const int cumu_cost_threshold = 25600;
-      // int cumu_cost_threshold;
-      // if (sr_info.sess_id == 0)
-      //   cumu_cost_threshold = 6177;
-      // else
-      //   cumu_cost_threshold = 3694;
+      // const int cumu_cost_threshold = 25600;
+      int cumu_cost_threshold;
+      if (sr_info.sess_id == 0)
+        cumu_cost_threshold = 70000;
+      else
+        cumu_cost_threshold = 40000;
       bool thisIsGpuNode = node->assigned_device_name().find("gpu") != std::string::npos;
       if (*cost_model_generated) {
         if (thisIsGpuNode) {
+          LOG(INFO) << "[Yitao] in runtime, " << node->name() << " = (" << tom_node_start << ", " << tom_node_end << ") for sr_info = (" << sr_info.sess_id << ", " << sr_info.run_id << ")";
           {
             const std::string node_name = node->name();
             if (TLS_cost_model->find(node_name) != TLS_cost_model->end()) {
