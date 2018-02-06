@@ -2066,12 +2066,12 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
 
     // Yitao-TLS-Begin
     if (sr_info.run_id >= 15) {
-      // const int cumu_cost_threshold = 25600;
-      int cumu_cost_threshold;
-      if (sr_info.sess_id == 0)
-        cumu_cost_threshold = 70000;
-      else
-        cumu_cost_threshold = 40000;
+      const int cumu_cost_threshold = 12800;
+      // int cumu_cost_threshold;
+      // if (sr_info.sess_id == 0)
+      //   cumu_cost_threshold = 70000;
+      // else
+      //   cumu_cost_threshold = 40000;
       bool thisIsGpuNode = node->assigned_device_name().find("gpu") != std::string::npos;
       if (*cost_model_generated) {
         if (thisIsGpuNode) {
