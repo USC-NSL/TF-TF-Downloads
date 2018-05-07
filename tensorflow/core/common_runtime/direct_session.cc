@@ -659,6 +659,10 @@ Status DirectSession::Run(const RunOptions& run_options,
   // std::condition_variable* my_cv = new std::condition_variable;
   int* my_cumulated_cost = new int;
   *my_cumulated_cost = 0;
+
+  int64* last_decision_time = new int64;
+  *last_decision_time = 0;
+
   std::mutex* my_lock = new std::mutex;
 
   int* cv_check_count;
@@ -902,6 +906,7 @@ Status DirectSession::Run(const RunOptions& run_options,
   args.sr_info = sr_info;
   // args.my_cv = my_cv;
   args.my_cumulated_cost = my_cumulated_cost;
+  args.last_decision_time = last_decision_time;
   args.my_lock = my_lock;
 
   LOG(INFO) << "[Yitao] There are " << num_executors << " Executors in executors_and_keys...";

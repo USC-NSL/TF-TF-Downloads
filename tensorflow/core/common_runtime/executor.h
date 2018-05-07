@@ -591,6 +591,7 @@ class Executor {
     SessRunInfo sr_info;
     // std::condition_variable* my_cv;
     int* my_cumulated_cost;
+    int64* last_decision_time;
     std::mutex* my_lock;
     // Yitao-TLS-End
 
