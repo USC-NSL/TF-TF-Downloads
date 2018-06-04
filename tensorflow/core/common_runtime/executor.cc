@@ -2068,12 +2068,66 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
 
     // Yitao-TLS-Begin
     if (sr_info.run_id >= 15) {
-      const int cumu_cost_threshold = 800;
+      // Case One: one Net
+      const int cumu_cost_threshold = 51200;
+
+      // // Case Two: two Nets
       // int cumu_cost_threshold;
-      // if (sr_info.sess_id == 0)
+      // if (sr_info.sess_id == 0) // Inception
+      //   cumu_cost_threshold = 65000;
+      // else // ResNet
       //   cumu_cost_threshold = 70000;
-      // else
+
+      // // Case Three: three Nets
+      // int cumu_cost_threshold;
+      // if (sr_info.sess_id == 0) // Inception
       //   cumu_cost_threshold = 40000;
+      // else if (sr_info.sess_id == 1) // GoogleNet
+      //   cumu_cost_threshold = 20000;
+      // else // ResNet
+      //   cumu_cost_threshold = 30000;
+
+      // // Case Four: four Nets
+      // int cumu_cost_threshold;
+      // if (sr_info.sess_id == 0) // YOLO
+      //   cumu_cost_threshold = 1620;
+      // else if (sr_info.sess_id == 1) // Inception
+      //   cumu_cost_threshold = 22440;
+      // else if (sr_info.sess_id == 2) // GoogleNet
+      //   cumu_cost_threshold = 28524;
+      // else // ResNet
+      //   cumu_cost_threshold = 12138;
+
+      // // Case Five: five Nets
+      // int cumu_cost_threshold;
+      // if (sr_info.sess_id == 0) // Inception
+      //   cumu_cost_threshold = 22440 * 3;
+      // else if (sr_info.sess_id == 1) // GoogleNet
+      //   cumu_cost_threshold = 28524 * 2;
+      // else if (sr_info.sess_id == 2) // ResNet-101
+      //   cumu_cost_threshold = 19072 * 3;
+      // else if (sr_info.sess_id == 3) // ResNet-50
+      //   cumu_cost_threshold = 28353 * 2;
+      // else // ResNet-152
+      //   cumu_cost_threshold = 12138 * 3;
+
+      // // Case Six: seven Nets
+      // int cumu_cost_threshold;
+      // if (sr_info.sess_id == 0) // Inception
+      //   cumu_cost_threshold = 28868;
+      // else if (sr_info.sess_id == 1) // Resnet50
+      //   cumu_cost_threshold = 51427;
+      // else if (sr_info.sess_id == 2) // Googlenet
+      //   cumu_cost_threshold = 60926;
+      // else if (sr_info.sess_id == 3) // Alexnet
+      //   cumu_cost_threshold = 500763;
+      // else if (sr_info.sess_id == 4) // Resnet101
+      //   cumu_cost_threshold = 20900;
+      // else if (sr_info.sess_id == 5) // VGG
+      //   cumu_cost_threshold = 19787;
+      // else // Resnet152
+      //   cumu_cost_threshold = 13229;
+
       bool thisIsGpuNode = node->assigned_device_name().find("gpu") != std::string::npos;
       if (*cost_model_generated) {
         if (thisIsGpuNode) {
