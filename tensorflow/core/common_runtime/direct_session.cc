@@ -264,6 +264,11 @@ class DirectSessionFactory : public SessionFactory {
       return nullptr;
     }
 
+    for (int i = 0; i < devices.size(); i++) {
+      auto myDevice = devices[i];
+      LOG(INFO) << "[Yitao] Test in NewSession: device = " << myDevice->name();
+    }
+
     // Yitao-TLS-Begin
     // update the sess_count variable with lock to make sure it is thread-safe
     int sess_count_value;
@@ -494,6 +499,7 @@ DirectSession::DirectSession(const SessionOptions& options,
     LOG(INFO) << "Device mapping:\n" << mapping_str;
   }
   for (auto d : device_mgr_->ListDevices()) {
+    LOG(INFO) << "[Yitao] Test in DirectSession::DirectSession(), device = " << d->name();
     devices_.push_back(d);
     device_set_.AddDevice(d);
     d->op_segment()->AddHold(session_handle_);
@@ -913,6 +919,7 @@ Status DirectSession::Run(const RunOptions& run_options,
   // Yitao-TLS-End
 
   for (const auto& item : executors_and_keys->items) {
+    item.executor->PrintDeviceInfo();
     item.executor->RunAsync(args, barrier->Get());
   }
 
@@ -1408,12 +1415,15 @@ Status DirectSession::GetOrCreateExecutors(
         strings::StrCat(key, ";", handle_name_counter_value);
   }
 
+  LOG(INFO) << "[Yitao] @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ key = " << key;
+
   // See if we already have the executors for this run.
   {
     mutex_lock l(executor_lock_);  // could use reader lock
     auto it = executors_.find(key);
     if (it != executors_.end()) {
       *executors_and_keys = it->second.get();
+      LOG(INFO) << "[Yitao] @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 0...";
       return Status::OK();
     }
   }
@@ -1441,6 +1451,8 @@ Status DirectSession::GetOrCreateExecutors(
         strings::StrCat(sorted_key, ";", handle_name_counter_value);
   }
 
+  LOG(INFO) << "[Yitao] @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ sorted_key = " << sorted_key;
+
   // See if we already have the executors for this run.
   {
     mutex_lock l(executor_lock_);
@@ -1449,9 +1461,12 @@ Status DirectSession::GetOrCreateExecutors(
       *executors_and_keys = it->second.get();
       // Insert this under the original key.
       executors_.emplace(key, it->second);
+      LOG(INFO) << "[Yitao] @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 1...";
       return Status::OK();
     }
   }
+
+  LOG(INFO) << "[Yitao] @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 2...";
 
   // Nothing found, so create the executors and store in the cache.
   BuildGraphOptions options;
@@ -1499,7 +1514,7 @@ Status DirectSession::GetOrCreateExecutors(
     const string& partition_name = iter->first;
     std::unique_ptr<Graph>& partition_graph = iter->second;
 
-    LOG(INFO) << "[Yitao] @@@@@@ graph.num_nodes() = " << partition_graph->num_nodes() << " @@@@@@";
+    LOG(INFO) << "[Yitao] @@@@@@ graph.num_nodes() = " << partition_graph->num_nodes() << " @@@@@@ with partition_name = " << partition_name;
 
     const int graph_def_version = partition_graph->versions().producer();
 

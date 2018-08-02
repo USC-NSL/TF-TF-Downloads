@@ -359,6 +359,10 @@ class ExecutorImpl : public Executor {
 
   void RunAsync(const Args& args, DoneCallback done) override;
 
+  void PrintDeviceInfo() override {
+    LOG(INFO) << "[Yitao] Test: device = " << params_.device->name();
+  }
+
  private:
   friend class ExecutorState;
 
@@ -2005,6 +2009,7 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
         // // }
         // // Yitao-TLS-End
 
+        // LOG(INFO) << "[Yitao] Test in Process(): device->name() = " << device->name() << " for op_kernel " << op_kernel->name();
         device->Compute(CHECK_NOTNULL(op_kernel), &ctx);
 
         // // Yitao-TLS-Begin

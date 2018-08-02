@@ -598,6 +598,7 @@ class Executor {
   };
   typedef std::function<void(const Status&)> DoneCallback;
   virtual void RunAsync(const Args& args, DoneCallback done) = 0;
+  virtual void PrintDeviceInfo() = 0;
 
   // Synchronous wrapper for RunAsync().
   Status Run(const Args& args) {
