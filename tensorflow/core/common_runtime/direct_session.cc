@@ -1009,7 +1009,21 @@ Status DirectSession::Run(const RunOptions& run_options,
         TLS_cost_model->emplace(myNode.name(), myNode.compute_cost());
       }
     }
+    
+    // char data[100];
+    // int cost_value;
+    // ifstream infile; 
+    // infile.open("/home/yitao/Downloads/test/20180910/cost_model_075.txt"); 
+    // for (int i = 0; i < 1799; i++) {
+    //   infile >> cost_value >> data;
+    //   TLS_cost_model->emplace(data, cost_value);
+    // }
+
     *cost_model_generated = true;
+
+    // for (auto it = TLS_cost_model->begin(); it != TLS_cost_model->end(); ++it) {
+    //   LOG(INFO) << "[Yitao] TLS_cost_model: " << it->first << " : " << it->second;
+    // }
     // Yitao-TLS-End
   }
 
