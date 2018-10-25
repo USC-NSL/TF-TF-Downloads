@@ -919,6 +919,9 @@ CUDADriver::ContextGetSharedMemConfig(CudaContext* context) {
                                               uint64 bytes) {
   ScopedActivateContext activated{context};
   CUdeviceptr result = 0;
+
+  LOG(INFO) << "[Yitao] CUDADriver::DeviceAllocate() is called before cuMemAlloc!!!...";
+
   CUresult res = cuMemAlloc(&result, bytes);
   if (res != CUDA_SUCCESS) {
     LOG(ERROR) << "failed to allocate "

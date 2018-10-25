@@ -152,6 +152,7 @@ void GPUUtil::SetProtoFromGPU(const Tensor& tensor, Device* dev,
   if (total_bytes > 0) {
     port::Tracing::ScopedAnnotation annotation("SetProtoFromGPU");
     alloc = ProcessState::singleton()->GetCUDAHostAllocator(0);
+    LOG(INFO) << "[Yitao] Allocate<T> is called!...";
     buf = alloc->Allocate<char>(total_bytes);
     if (LogMemory::IsEnabled()) {
       LogMemory::RecordRawAllocation("SetProtoFromGPU",

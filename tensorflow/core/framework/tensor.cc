@@ -128,6 +128,7 @@ struct Helper {
       LogUnexpectedSize(in.size(), sizeof(T) * n);
       return nullptr;
     }
+    LOG(INFO) << "[Yitao] new Buffer<T> is called!!!...";
     Buffer<T>* buf = new Buffer<T>(a, n);
     char* data = buf->template base<char>();
     if (data == nullptr) {
@@ -164,6 +165,7 @@ struct Helper<string> {
   // usually the TensorProto::tensor_content.
   template <typename Source>
   static TensorBuffer* Decode(Allocator* a, const Source& in, int64 n) {
+    LOG(INFO) << "[Yitao] new Buffer<T> is called!!!...";
     Buffer<string>* buf = new Buffer<string>(a, n);
     string* strings = buf->template base<string>();
     if (strings == nullptr || !port::DecodeStringList(in, strings, n)) {
@@ -201,6 +203,7 @@ struct Helper<ResourceHandle> {
   // usually the TensorProto::tensor_content.
   template <typename Source>
   static TensorBuffer* Decode(Allocator* a, const Source& in, int64 n) {
+    LOG(INFO) << "[Yitao] new Buffer<T> is called!!!...";
     auto* buf = new Buffer<ResourceHandle>(a, n);
     ResourceHandle* ps = buf->template base<ResourceHandle>();
     if (ps == nullptr || !port::DecodeResourceHandleList(in, ps, n)) {
@@ -361,12 +364,16 @@ struct ProtoHelper<Eigen::half> {
 
 template <typename T>
 Buffer<T>::Buffer(Allocator* a, int64 n)
-    : BufferBase(a), data_(a->Allocate<T>(n)), elem_(n) {}
+    : BufferBase(a), data_(a->Allocate<T>(n)), elem_(n) {
+      LOG(INFO) << "[Yitao] Allocate<T> is called!...";
+    }
 
 template <typename T>
 Buffer<T>::Buffer(Allocator* a, int64 n,
                   const AllocationAttributes& allocation_attr)
-    : BufferBase(a), data_(a->Allocate<T>(n, allocation_attr)), elem_(n) {}
+    : BufferBase(a), data_(a->Allocate<T>(n, allocation_attr)), elem_(n) {
+      LOG(INFO) << "[Yitao] Allocate<T> is called!...";
+    }
 
 template <typename T>
 Buffer<T>::~Buffer() {
@@ -391,6 +398,7 @@ Buffer<T>::~Buffer() {
 template <typename T>
 TensorBuffer* FromProtoField(Allocator* a, const TensorProto& in, int64 n) {
   CHECK_GT(n, 0);
+  LOG(INFO) << "[Yitao] new Buffer<T> is called!!!...";
   Buffer<T>* buf = new Buffer<T>(a, n);
   T* data = buf->template base<T>();
   if (data == nullptr) {
@@ -422,6 +430,7 @@ template <>
 TensorBuffer* FromProtoField<Eigen::half>(Allocator* a, const TensorProto& in,
                                           int64 n) {
   CHECK_GT(n, 0);
+  LOG(INFO) << "[Yitao] new Buffer<T> is called!!!...";
   Buffer<Eigen::half>* buf = new Buffer<Eigen::half>(a, n);
   uint16* data = buf->template base<uint16>();
   if (data == nullptr) {
@@ -582,6 +591,7 @@ Tensor::Tensor(Allocator* a, DataType type, const TensorShape& shape)
   set_dtype(type);
   CHECK_NOTNULL(a);
   if (shape_.num_elements() > 0 || a->ShouldAllocateEmptyTensors()) {
+    LOG(INFO) << "[Yitao] new Buffer<T> is called!!!...";
     CASES(type, buf_ = new Buffer<T>(a, shape.num_elements()));
   }
   if (buf_ != nullptr && buf_->data() != nullptr && LogMemory::IsEnabled()) {
@@ -596,6 +606,7 @@ Tensor::Tensor(Allocator* a, DataType type, const TensorShape& shape,
   set_dtype(type);
   CHECK_NOTNULL(a);
   if (shape_.num_elements() > 0 || a->ShouldAllocateEmptyTensors()) {
+    LOG(INFO) << "[Yitao] new Buffer<T> is called!!!...";
     CASES(type, buf_ = new Buffer<T>(a, shape.num_elements(), allocation_attr));
   }
   if (!allocation_attr.allocation_will_be_logged && buf_ != nullptr &&

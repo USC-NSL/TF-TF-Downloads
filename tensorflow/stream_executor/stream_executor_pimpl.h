@@ -654,6 +654,7 @@ class StreamExecutor {
 template <typename T>
 inline DeviceMemory<T> StreamExecutor::AllocateArray(uint64 element_count) {
   uint64 bytes = sizeof(T) * element_count;
+  LOG(INFO) << "[Yitao] Allocate() is called!...";
   void *opaque = Allocate(bytes);
   return DeviceMemory<T>::MakeFromByteSize(opaque, bytes);
 }
@@ -724,6 +725,7 @@ void ScopedDeviceMemory<ElemT>::Reset(std::nullptr_t) {
 
 template <typename T>
 DeviceMemory<T> StreamExecutor::AllocateZeroed() {
+  LOG(INFO) << "[Yitao] Allocate() is called!...";
   void *opaque = Allocate(sizeof(T));
   if (opaque == nullptr) {
     return DeviceMemory<T>{};

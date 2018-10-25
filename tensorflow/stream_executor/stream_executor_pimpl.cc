@@ -421,6 +421,7 @@ bool StreamExecutor::BlockHostUntilDone(Stream *stream) {
 }
 
 void *StreamExecutor::Allocate(uint64 size) {
+  LOG(INFO) << "[Yitao] Allocate() is called!...";
   void *buf = implementation_->Allocate(size);
   VLOG(1) << "Called StreamExecutor::Allocate(size=" << size << ") returns "
           << buf << StackTraceIfVLOG10();

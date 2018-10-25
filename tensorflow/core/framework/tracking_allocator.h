@@ -47,6 +47,7 @@ class TrackingAllocator : public Allocator {
   explicit TrackingAllocator(Allocator* allocator, bool track_ids);
   string Name() override { return allocator_->Name(); }
   void* AllocateRaw(size_t alignment, size_t num_bytes) override {
+    LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
     return AllocateRaw(alignment, num_bytes, AllocationAttributes());
   }
   void* AllocateRaw(size_t alignment, size_t num_bytes,

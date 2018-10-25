@@ -139,6 +139,7 @@ class TF_ManagedBuffer : public TensorBuffer {
 };
 
 void* allocate_tensor(const char* operation, size_t len) {
+  LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
   void* data =
       tensorflow::cpu_allocator()->AllocateRaw(EIGEN_MAX_ALIGN_BYTES, len);
   if (tensorflow::LogMemory::IsEnabled()) {

@@ -431,6 +431,7 @@ void CUDAExecutor::VlogOccupancyInfo(const KernelBase &kernel,
 }
 
 void *CUDAExecutor::Allocate(uint64 size) {
+  LOG(INFO) << "[Yitao] CUDAExecutor::Allocate() is called before CUDADriver::DeviceAllocate()!!!...";
   return CUDADriver::DeviceAllocate(context_, size);
 }
 

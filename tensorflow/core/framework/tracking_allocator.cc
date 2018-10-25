@@ -31,6 +31,7 @@ TrackingAllocator::TrackingAllocator(Allocator* allocator, bool track_sizes)
 void* TrackingAllocator::AllocateRaw(
     size_t alignment, size_t num_bytes,
     const AllocationAttributes& allocation_attr) {
+  LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
   void* ptr = allocator_->AllocateRaw(alignment, num_bytes, allocation_attr);
   // If memory is exhausted AllocateRaw returns nullptr, and we should
   // pass this through to the caller

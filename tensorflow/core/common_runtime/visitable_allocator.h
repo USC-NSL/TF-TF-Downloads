@@ -57,6 +57,7 @@ class TrackingVisitableAllocator : public TrackingAllocator,
   string Name() override { return TrackingAllocator::Name(); }
 
   void* AllocateRaw(size_t alignment, size_t num_bytes) override {
+    LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
     return TrackingAllocator::AllocateRaw(alignment, num_bytes);
   }
 

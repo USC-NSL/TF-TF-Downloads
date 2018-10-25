@@ -103,6 +103,7 @@ class EigenCudaStreamDevice : public ::Eigen::StreamInterface {
   }
 
   void* allocate(size_t num_bytes) const override {
+    LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
     void* ret = allocator_->AllocateRaw(32 /* alignment */, num_bytes);
     if (ret == nullptr) {
       if (context_) {
@@ -274,6 +275,7 @@ Status BaseGPUDevice::Init(const SessionOptions& options) {
         StreamGroupFactory::Global().GetOrCreate(gpu_id_, i, executor_));
 
     size_t scratch_buffer_size = Eigen::kCudaScratchSize + sizeof(unsigned int);
+    LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
     void* scratch_buffer = gpu_allocator_->AllocateRaw(
         Allocator::kAllocatorAlignment, scratch_buffer_size);
     if (scratch_buffer == nullptr) {

@@ -590,6 +590,9 @@ Status OpKernelContext::allocate_tensor(
     DataType type, const TensorShape& shape, Tensor* out_tensor,
     AllocatorAttributes attr, const AllocationAttributes& allocation_attr) {
   Allocator* a = get_allocator(attr);
+
+  LOG(INFO) << "[Yitao] we get allocator " << a->Name();
+  
   AllocationAttributes logged_attr(allocation_attr);
   logged_attr.allocation_will_be_logged = true;
   Tensor new_tensor(a, type, shape, logged_attr);

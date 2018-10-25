@@ -249,6 +249,8 @@ void* BFCAllocator::AllocateRawInternal(size_t unused_alignment,
   // so all memory addresses are nicely byte aligned.
   size_t rounded_bytes = RoundedBytes(num_bytes);
 
+  LOG(INFO) << "[Yitao] Stats before allocating " << rounded_bytes << " (" << num_bytes << ") on device " << Name() << ": \n" << stats_.DebugString();
+
   // The BFC allocator tries to find the best fit first.
   BinNum bin_num = BinNumForSize(rounded_bytes);
 

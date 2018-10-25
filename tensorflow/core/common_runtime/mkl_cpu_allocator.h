@@ -64,6 +64,7 @@ class MklCPUAllocator : public Allocator {
   inline string Name() override { return kName; }
 
   inline void* AllocateRaw(size_t alignment, size_t num_bytes) override {
+    LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
     return allocator_->AllocateRaw(alignment, num_bytes);
   }
 

@@ -141,6 +141,7 @@ class RecordingAllocator : public Allocator {
 
   string Name() override { return a_->Name(); }
   void* AllocateRaw(size_t alignment, size_t num_bytes) override {
+    LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
     void* p = a_->AllocateRaw(alignment, num_bytes);
     mutex_lock l(*mu_);
     (*mm_)[p] = md_;

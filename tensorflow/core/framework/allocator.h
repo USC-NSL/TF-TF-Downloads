@@ -93,6 +93,7 @@ class Allocator {
                             const AllocationAttributes& allocation_attr) {
     // The default behavior is to use the implementation without any allocation
     // attributes.
+    LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
     return AllocateRaw(alignment, num_bytes);
   }
 
@@ -107,6 +108,7 @@ class Allocator {
   // allocation.
   template <typename T>
   T* Allocate(size_t num_elements) {
+    LOG(INFO) << "[Yitao] Allocate<T> is called!...";
     return Allocate<T>(num_elements, AllocationAttributes());
   }
 
@@ -120,6 +122,7 @@ class Allocator {
       return NULL;
     }
 
+    LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
     void* p = AllocateRaw(kAllocatorAlignment, sizeof(T) * num_elements,
                           allocation_attr);
     T* typed_p = reinterpret_cast<T*>(p);
@@ -272,11 +275,13 @@ class AllocatorWrapper : public Allocator {
   string Name() override { return wrapped_->Name(); }
 
   void* AllocateRaw(size_t alignment, size_t num_bytes) override {
+    LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
     return wrapped_->AllocateRaw(alignment, num_bytes);
   }
 
   void* AllocateRaw(size_t alignment, size_t num_bytes,
                     const AllocationAttributes& allocation_attr) override {
+    LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
     return wrapped_->AllocateRaw(alignment, num_bytes, allocation_attr);
   }
 

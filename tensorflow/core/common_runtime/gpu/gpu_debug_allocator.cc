@@ -85,6 +85,7 @@ GPUDebugAllocator::~GPUDebugAllocator() { delete base_allocator_; }
 void* GPUDebugAllocator::AllocateRaw(size_t alignment, size_t num_bytes) {
   num_bytes += (2 * MASK_BYTES);
 
+  LOG(INFO) << "[Yitao] AllocateRaw() is called!...";
   void* allocated_ptr = base_allocator_->AllocateRaw(alignment, num_bytes);
 
   // Return the pointer after the header
