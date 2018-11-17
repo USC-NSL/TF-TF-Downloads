@@ -1007,6 +1007,16 @@ Status DirectSession::Run(const RunOptions& run_options,
       const auto& myNode = cost_graph->node(i);
       if (myNode.compute_cost() >= 0) {                                   // <=== pay attention
         TLS_cost_model->emplace(myNode.name(), myNode.compute_cost());
+        // LOG(INFO) << "[Yitao] we are recording Node " << myNode.id() << " " << myNode.name() << " with cost of " << myNode.compute_cost() << " on device " << myNode.device() << ", and (" << myNode.temporary_memory_size() << ", " << myNode.host_temp_memory_size() << ", " << myNode.device_temp_memory_size() << ", " << myNode.host_persistent_memory_size() << ", " << myNode.device_persistent_memory_size() << ") with output_info_size = " << myNode.output_info_size();
+        // for (int j = 0; j < myNode.output_info_size(); j++) {
+        //   const auto& out_info = myNode.output_info(j);
+        //   if (out_info.shape().dim_size() == 0)
+        //     LOG(INFO) << "[Yitao]    child node with size = " << out_info.size() << ", alias_input_port = " << out_info.alias_input_port() << ", shape = " << out_info.shape().dim_size() << " ()" << ", dtype = " << out_info.dtype();
+        //   else if (out_info.shape().dim_size() == 1)
+        //     LOG(INFO) << "[Yitao]    child node with size = " << out_info.size() << ", alias_input_port = " << out_info.alias_input_port() << ", shape = " << out_info.shape().dim_size() << " (" << out_info.shape().dim(0).size() << ")" << ", dtype = " << out_info.dtype();
+        //   else
+        //     LOG(INFO) << "[Yitao]    child node with size = " << out_info.size() << ", alias_input_port = " << out_info.alias_input_port() << ", shape = " << out_info.shape().dim_size() << " (" << out_info.shape().dim(0).size() << ", " << out_info.shape().dim(1).size() << ")" << ", dtype = " << out_info.dtype();
+        // }
       }
     }
     
