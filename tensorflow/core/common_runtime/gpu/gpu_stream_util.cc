@@ -61,6 +61,19 @@ Status AssignStreams(const Graph* graph, const AssignStreamsOpts& opts,
       }
     }
   }
+
+  // // Yitao-TLS-Begin
+  // for (Node* n : order) {
+  //   const int node_id = n->id();
+  //   LOG(INFO) << "[Yitao] Node " << node_id << " " << n->type_string() << " "
+  //             << n->name() << " " << n->in_edges().size() << " inputs";
+  //   for (const Edge* e : n->in_edges()) {
+  //     LOG(INFO) << "[Yitao]     Edge from " << e->src()->id() << "  " << e->src()->name()
+  //               << " fanout " << e->src()->out_edges().size();
+  //   }
+  // }
+  // // Yitao-TLS-End
+
   // We perform stream assignment assuming a large number of
   // stream IDs and then map these down to the required number of streams
   // using simple round-robin.

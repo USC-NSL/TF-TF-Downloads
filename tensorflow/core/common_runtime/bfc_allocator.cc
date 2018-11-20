@@ -193,6 +193,7 @@ void* BFCAllocator::AllocateRaw(size_t unused_alignment, size_t num_bytes) {
     return r;
   } else {
     static const int64 kMaxMillisToWait = 10000;  // 10 seconds
+    LOG(INFO) << "[Yitao] AllocateRaw() failed, let's retry...!!!";
     return retry_helper_.AllocateRaw(
         [this](size_t a, size_t nb, bool v) {
           return AllocateRawInternal(a, nb, v);

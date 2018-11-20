@@ -1631,9 +1631,9 @@ void ExecutorState::Process(TaggedNode tagged_node, int64 scheduled_usec) {
     mutex_lock l(mu_);
     process_count += 1;
     process_id = process_count;
-    // if (sess_run_id == 10) {
-    //   LOG(INFO) << "[Yitao] Now there are " << process_count << " Process() called with node " << tagged_node.node->id() << " " << tagged_node.node->type_string() << " " << tagged_node.node->name() << " with device " << tagged_node.node->assigned_device_name();
-    // }
+    if (sr_info.run_id == 10) {
+      LOG(INFO) << "[Yitao] Now there are " << process_count << " Process() called with node " << tagged_node.node->id() << " " << tagged_node.node->type_string() << " " << tagged_node.node->name() << " with device " << tagged_node.node->assigned_device_name();
+    }
   }
   // Yitao-TLS-End
 
